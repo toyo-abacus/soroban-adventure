@@ -203,6 +203,18 @@ summary{cursor:pointer;padding:8px}
 .combination-figure .combination-question{justify-content:flex-start;gap:2px 7px;margin:0;text-align:left}
 .combination-figure .combination-question strong{color:var(--combo-accent)}
 .combination-keys button.card{border-bottom-color:var(--combo-accent)}
+
+.combination-result-time{margin:0 0 10px;text-align:center;font-size:1.1rem;font-weight:800;font-variant-numeric:tabular-nums}
+.combination-history{margin:20px auto 6px;max-width:640px}
+.combination-history h3{font-size:1.05rem}
+.combination-history>p{font-size:.84rem;color:var(--muted);margin:5px 0 8px}
+.combination-history-table{border-collapse:collapse;width:100%;background:white;table-layout:auto;font-size:clamp(.72rem,3vw,.9rem)}
+.combination-history-table thead{background:#eaf3ff}
+.combination-history-table th,.combination-history-table td{padding:8px 5px;border-bottom:1px solid #e2eaf3;text-align:center;font-variant-numeric:tabular-nums}
+.combination-history-table :is(th,td):not(:first-child){white-space:nowrap}
+.combination-history-table th:first-child{text-align:left}
+.combination-history-table th small{display:block;color:var(--muted);font-size:.83em}
+.combination-history summary{min-height:44px}
 </style>
 </head>
 <body>
@@ -744,7 +756,7 @@ function openCombinations() {
 function startCombinations(mode) {
   const deck = combinationDeck(mode);
   if (!deck.length) return;
-  combinationRound = {mode,deck,index:0,correct:0,answered:false};
+  combinationRound = {mode,deck,index:0,correct:0,answered:false,elapsedMs:0,presentedAt:0};
   showCombination();
 }
 
@@ -762,6 +774,7 @@ function showCombination() {
     '<div class="combination-keys" aria-label="こたえの すうじ">' +
     Array.from({length:9},(_,i)=>button(i+1,'combo-answer:'+(i+1),'card '+tone)).join('') +
     '</div><div id="combination-feedback"></div>',0,'combination-panel');
+  round.presentedAt = performance.now();
 }
 
 function combinationIllustration(first,second) {
@@ -777,11 +790,13 @@ function answerCombination(answer) {
   const question = round.deck[round.index];
   const correct = answer === question.answer;
   round.answered = true;
+  round.elapsedMs += performance.now() - round.presentedAt;
   if (correct) {
     round.correct++;
     chime('right');
     celebration(10);
   }
+  if (round.index+1 === round.deck.length) saveCombinationResult(round);
   for (const key of app.querySelectorAll('.combination-keys button')) {
     key.disabled = true;
     if (key.dataset.action === 'combo-answer:'+question.answer) key.classList.add('combination-right');
@@ -804,7 +819,7 @@ function answerCombination(answer) {
 
 function nextCombination() {
   const round = combinationRound;
-  if (!round?.answered) return;
+  if (!round?.answered || round.index >= round.deck.length) return;
   if (++round.index < round.deck.length) {
     showCombination();
     return;
@@ -812,14 +827,44 @@ function nextCombination() {
   const perfect = round.correct === round.deck.length;
   section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
     '<div class="guide">' + mascot('reward') + '<p class="combination-formula">' +
-    round.deck.length + ' もんの うち ' + round.correct + ' もん せいかい</p></div><div class="actions">' +
+    round.deck.length + ' もんの うち ' + round.correct + ' もん せいかい</p></div>' +
+    '<p class="combination-result-time">タイム ' + combinationTime(round.elapsedMs) + '</p><div class="actions">' +
     button('もういちど あそぶ','combo-start:'+round.mode,'button primary') +
-    button('れんしゅうを えらぶ','combo-menu') + button('ホームにもどる','home') +
+    button('れんしゅうを えらぶ','combo-menu') + button('きろくをみる','records') + button('ホームにもどる','home') +
     '</div>',0,'combination-panel');
   if (perfect) {
     chime('win');
     celebration(38);
   }
+}
+
+
+const combinationModeTitle = mode => mode === 'mix' ? '3しゅるい ミックス' : COMBINATION_MODES[mode].title;
+const combinationTime = milliseconds => {
+  const tenths = Math.round(milliseconds / 100);
+  return clock(tenths / 10) + '.' + (tenths % 10);
+};
+function saveCombinationResult(round) {
+  const result = {mode:round.mode,date:today(),correct:round.correct,total:round.deck.length,elapsedMs:round.elapsedMs};
+  persistPlayers(accountList().map(player => player.id === activePlayer.id
+    ? {...player,combinationHistory:[...(player.combinationHistory || []),result]}
+    : player));
+}
+
+function combinationRecords() {
+  const player = accountList().find(entry => entry.id === activePlayer.id);
+  const history = [...(player?.combinationHistory || [])].reverse();
+  const table = entries => '<table class="combination-history-table"><thead><tr>' +
+    '<th scope="col">れんしゅう</th><th scope="col">○の かず</th><th scope="col">タイム</th></tr></thead><tbody>' +
+    entries.map(entry => '<tr><th scope="row"><span>' + combinationModeTitle(entry.mode) +
+      '</span><small>' + escapeText(entry.date.replaceAll('-','/')) + '</small></th>' +
+      '<td>' + entry.correct + ' / ' + entry.total + '</td><td>' + combinationTime(entry.elapsedMs) +
+      '</td></tr>').join('') + '</tbody></table>';
+  return '<section class="combination-history" aria-labelledby="combination-history-title">' +
+    '<h3 class="center" id="combination-history-title">くみあわせれんしゅうの きろく</h3>' +
+    (history.length ? '<p class="center">もんだいに こたえた じかんの ごうけい</p>' + table(history.slice(0,10)) +
+      (history.length > 10 ? '<details><summary>まえの きろくを みる</summary>' + table(history.slice(10)) + '</details>' : '') :
+      '<p class="center">10もん こたえると、ここに きろくが のるよ。</p>') + '</section>';
 }
 
 const accountList = () => {
@@ -1101,7 +1146,7 @@ function records() {
     '<div class="method-stats">' + METHOD_KEYS.map(key => {
       const info = record.methods[key];
       return metric(METHODS[key],info.total ? accuracy(info.correct,info.total)+'%（'+info.correct+'/'+info.total+'）' : '—');
-    }).join('') + '</div><div class="actions">' + (pending ? button('まちがえた もんだい','review:saved','button primary') : '') +
+    }).join('') + '</div>' + combinationRecords() + '<div class="actions">' + (pending ? button('まちがえた もんだい','review:saved','button primary') : '') +
     button('ホームにもどる','home') + '</div>');
 }
 
