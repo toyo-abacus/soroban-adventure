@@ -170,6 +170,39 @@ summary{cursor:pointer;padding:8px}
 .parents-guide-text{margin:0 0 9px;padding:clamp(13px,3vw,21px);background:#fffdf8f7;border:1px solid white;border-radius:16px;line-height:1.74;font-size:.94rem;font-weight:500;overflow-wrap:anywhere}
 .parents-guide-text p+p{margin-top:.75em}
 .parents-guide>summary{min-height:44px}
+
+.combination-panel{max-width:600px}
+.combination-modes{display:grid;gap:10px;max-width:440px;margin:auto}
+.combination-progress{display:flex;justify-content:space-between;gap:10px;max-width:430px;margin:12px auto 5px;color:var(--muted);font-size:.85rem}
+.combination-question{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:4px 10px;margin:2px auto 14px;text-align:center;font-weight:750;font-size:clamp(1rem,4.8vw,1.35rem)}
+.combination-question strong{font-size:clamp(2.2rem,10vw,3.1rem);line-height:1.14;color:var(--navy)}
+.combination-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:430px;margin:auto}
+.combination-keys button.card{min-height:49px;padding:5px;font-size:1.3rem}
+.combination-keys .combination-right{background:#c7f3d9;border:2px solid #177250}
+.combination-keys .combination-wrong{border:2px solid #94395c}
+.combination-feedback{text-align:center;margin:15px auto 0;padding:10px;background:#edf6ff;border-radius:14px}
+.combination-feedback>strong{font-size:.95rem}
+.combination-formula{font-size:clamp(1.15rem,5vw,1.6rem);text-align:center;font-weight:900}
+.combination-dots{display:flex;justify-content:center;gap:7px;margin-top:5px}
+.combination-dot-group{display:flex;flex-wrap:wrap;gap:3px;max-width:75px;padding:3px}
+.combination-dot{width:11px;height:11px;border-radius:50%}
+.combination-dot.dot-0{background:#3573ad}
+.combination-dot.dot-1{background:#9d5290}
+
+.combination-blue{--card:#cfeaff;--combo-accent:#2773a8}
+.combination-red{--card:#ffd1c2;--combo-accent:#af4d36}
+.combination-pink{--card:#f8cdea;--combo-accent:#963875}
+.combination-mix{--card:linear-gradient(108deg,#d7efff 0%,#d7efff 26%,#ffe0d6 45%,#f8d7ef 73%,#f8d7ef 100%)}
+.combination-modes .card{display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;justify-items:start;padding:8px 12px;font-size:clamp(.92rem,4vw,1.1rem)}
+.combination-modes .combination-mix{grid-template-columns:minmax(93px,1fr) minmax(0,1.35fr);gap:8px}
+.combination-mascots{display:flex;align-items:center;justify-content:center;width:100%;min-width:0}
+.combination-mascots .mascot{width:62px;height:60px}
+.combination-mix .combination-mascots .mascot{width:min(33.33%,44px);height:49px}
+.combination-figure{display:flex;justify-content:center;align-items:center;gap:clamp(8px,3.5vw,15px);margin:0 auto 13px;max-width:430px;border-bottom:1px solid #d6e1ef;padding:0 2px 9px}
+.combination-figure>.mascot{flex:none;width:clamp(64px,19vw,88px);height:clamp(65px,20vw,96px)}
+.combination-figure .combination-question{justify-content:flex-start;gap:2px 7px;margin:0;text-align:left}
+.combination-figure .combination-question strong{color:var(--combo-accent)}
+.combination-keys button.card{border-bottom-color:var(--combo-accent)}
 </style>
 </head>
 <body>
@@ -573,7 +606,7 @@ function home() {
   const items = [
     ['🐾','れんしゅうする','setup:study','t1'], ['🏁','10もんチャレンジ','setup:challenge','t2'],
     ['⚡','スピードゲーム','setup:speed','t3'], ['🎯','にがてれんしゅう','setup:focus','t4'],
-    ['🧮','そろばんの うごかしかた','tutor','t1'], ['🏅','メダルコレクション','medals','t5'], ['📖','きろくをみる','records','']
+    ['🧮','そろばんの うごかしかた','tutor','t1'], ['🔢','くみあわせれんしゅう','combo-menu','t2'], ['🏅','メダルコレクション','medals','t5'], ['📖','きろくをみる','records','']
   ];
   screen('<section class="home-hero"><h1 class="title">そろばんのおやくそく<br><strong>大冒険！</strong></h1>' +
     '<p class="subtitle">おともだち・おあいてさん・へんしんを マスターしよう！</p>' + cast() +
@@ -662,6 +695,132 @@ app.addEventListener('submit',event => {
   startTutor();
   $('tutor-output').scrollIntoView({block:'nearest'});
 });
+
+
+const COMBINATION_MODES = {
+  friend:{title:'10のおともだち', values:[1,2,3,4,5,6,7,8,9], tone:'combination-blue', character:'guide'},
+  pair:{title:'5のおあいてさん', values:[1,2,3,4], tone:'combination-red', character:'cheer'},
+  change:{title:'へんしんの くみあわせ', values:[6,7,8,9], tone:'combination-pink', character:'reward'}
+};
+const COMBINATION_BANK = Object.entries(COMBINATION_MODES).flatMap(([kind,mode]) =>
+  mode.values.map(number => ({
+    kind,number,
+    answer: kind === 'friend' ? 10-number : kind === 'pair' ? 5-number : number-5
+  })));
+const COMBINATION_COUNT = 10;
+let combinationRound = null;
+
+function combinationDeck(mode) {
+  const kinds = Object.keys(COMBINATION_MODES);
+  const deck = [];
+  if (mode === 'mix') {
+    const each = kinds.map(kind => shuffled(COMBINATION_BANK.filter(q => q.kind === kind))[0]);
+    const others = shuffled(COMBINATION_BANK.filter(q => !each.includes(q)));
+    return shuffled([...each,...others.slice(0,COMBINATION_COUNT-each.length)]);
+  }
+  const pool = COMBINATION_BANK.filter(q => q.kind === mode);
+  if (!pool.length) return deck;
+  while (deck.length < COMBINATION_COUNT) {
+    const group = shuffled(pool);
+    if (group[0] === deck.at(-1)) [group[0],group[1]] = [group[1],group[0]];
+    deck.push(...group);
+  }
+  return deck.slice(0,COMBINATION_COUNT);
+}
+
+const combinationMascots = modes => '<span class="combination-mascots" aria-hidden="true">' +
+  modes.map(mode => mascot(mode.character)).join('') + '</span>';
+
+function openCombinations() {
+  combinationRound = null;
+  section('おやくそくの くみあわせ',
+    '<p class="lead center">れんしゅうする くみあわせを えらぼう！</p>' +
+    '<div class="combination-modes">' +
+    Object.entries(COMBINATION_MODES).map(([kind,mode]) =>
+      button(combinationMascots([mode])+'<span>'+mode.title+'</span>','combo-start:'+kind,'card stage '+mode.tone)).join('') +
+    button(combinationMascots(Object.values(COMBINATION_MODES))+'<span>3しゅるい ミックス</span>','combo-start:mix','card stage combination-mix') + '</div>',0,'combination-panel');
+}
+
+function startCombinations(mode) {
+  const deck = combinationDeck(mode);
+  if (!deck.length) return;
+  combinationRound = {mode,deck,index:0,correct:0,answered:false};
+  showCombination();
+}
+
+function showCombination() {
+  const round = combinationRound;
+  const question = round.deck[round.index];
+  const {title,tone,character} = COMBINATION_MODES[question.kind];
+  round.answered = false;
+  const prompt = question.kind === 'change' ? 'は 5と いくつに へんしんする？' :
+    question.kind === 'friend' ? 'の おともだちは？' : 'の おあいてさんは？';
+  section(title,
+    '<div class="combination-progress"><span>' + (round.index+1) + ' / ' + round.deck.length +
+    ' もん</span><span>せいかい ' + round.correct + '</span></div>' +
+    '<div class="combination-figure '+tone+'">'+mascot(character)+'<p class="combination-question"><strong>' + question.number + '</strong><span>' + prompt + '</span></p></div>' +
+    '<div class="combination-keys" aria-label="こたえの すうじ">' +
+    Array.from({length:9},(_,i)=>button(i+1,'combo-answer:'+(i+1),'card '+tone)).join('') +
+    '</div><div id="combination-feedback"></div>',0,'combination-panel');
+}
+
+function combinationIllustration(first,second) {
+  return '<div class="combination-dots" aria-hidden="true">' +
+    [first,second].map((count,index) => '<span class="combination-dot-group">' +
+      Array.from({length:count},()=>'<i class="combination-dot dot-'+index+'"></i>').join('') +
+      '</span>').join('') + '</div>';
+}
+
+function answerCombination(answer) {
+  const round = combinationRound;
+  if (!round || round.answered) return;
+  const question = round.deck[round.index];
+  const correct = answer === question.answer;
+  round.answered = true;
+  if (correct) {
+    round.correct++;
+    chime('right');
+    celebration(10);
+  }
+  for (const key of app.querySelectorAll('.combination-keys button')) {
+    key.disabled = true;
+    if (key.dataset.action === 'combo-answer:'+question.answer) key.classList.add('combination-right');
+    if (!correct && key.dataset.action === 'combo-answer:'+answer) key.classList.add('combination-wrong');
+  }
+  app.querySelector('.combination-progress span:last-child').textContent = 'せいかい '+round.correct;
+  const {kind,number,answer:expected} = question;
+  const first = kind === 'change' ? 5 : number;
+  const total = first+expected;
+  const formula = kind === 'change' ? number+' は '+first+' と '+expected :
+    first+' と '+expected+' で '+total;
+  $('combination-feedback').innerHTML = '<div class="combination-feedback" role="status">' +
+    '<strong>' + (correct ? 'せいかい！' : 'おしい！ くみあわせを みてみよう。') + '</strong>' +
+    '<p class="combination-formula">' + formula + '</p>' +
+    combinationIllustration(first,expected) + '</div><div class="actions">' +
+    button(round.index+1 === round.deck.length ? 'けっかを みる →' : 'つぎの もんだい →',
+      'combo-next','button primary') + '</div>';
+  $('combination-feedback').querySelector('button').focus();
+}
+
+function nextCombination() {
+  const round = combinationRound;
+  if (!round?.answered) return;
+  if (++round.index < round.deck.length) {
+    showCombination();
+    return;
+  }
+  const perfect = round.correct === round.deck.length;
+  section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
+    '<div class="guide">' + mascot('reward') + '<p class="combination-formula">' +
+    round.deck.length + ' もんの うち ' + round.correct + ' もん せいかい</p></div><div class="actions">' +
+    button('もういちど あそぶ','combo-start:'+round.mode,'button primary') +
+    button('れんしゅうを えらぶ','combo-menu') + button('ホームにもどる','home') +
+    '</div>',0,'combination-panel');
+  if (perfect) {
+    chime('win');
+    celebration(38);
+  }
+}
 
 const accountList = () => {
   try {
@@ -965,6 +1124,10 @@ app.addEventListener('click',event => {
     case 'rename': editPlayer(value); break;
     case 'setup': setup(value); break;
     case 'tutor': tutor(); break;
+    case 'combo-menu': openCombinations(); break;
+    case 'combo-start': startCombinations(value); break;
+    case 'combo-answer': answerCombination(Number(value)); break;
+    case 'combo-next': nextCombination(); break;
     case 'tutor-example':
       $('tutor-start').value = value;
       $('tutor-sign').value = extra;
