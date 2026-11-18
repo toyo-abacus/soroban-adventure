@@ -177,7 +177,7 @@ const COLORS = {direct:'t1', friend:'t2', pair:'t4', change:'t5'};
 const LEVELS = [
   {name:'10の にじ', lesson:'そのまま・おともだち', methods:['direct','friend']},
   {name:'5の おか', lesson:'そのまま・おあいてさん', methods:['direct','pair']},
-  {name:'へんしんの もり', lesson:'へんしんに ちょうせん！', methods:['change','friend','pair'], order:[0,1,0,2]},
+  {name:'へんしんの もり', lesson:'へんしんに ちょうせん！', methods:['change','friend','pair'], methodWeights:{change:2}},
   {name:'おやくそくの まち', lesson:'おやくそくミックス！', methods:METHOD_KEYS},
   {name:'スピードの そら', lesson:'スピードマスター！', methods:METHOD_KEYS}
 ];
@@ -263,22 +263,36 @@ const BONUS = {2:20,3:30,5:50,10:100,20:200};
 const speedPoints = seconds => Math.max(0, 20 - Math.floor(seconds * 2));
 const accuracy = (right, total) => total ? Math.round(100 * right / total) : 0;
 
+function shuffled(items) {
+  const pool = [...items];
+  for (let index = pool.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [pool[index],pool[other]] = [pool[other],pool[index]];
+  }
+  return pool;
+}
+
 function makeDeck(config) {
-  if (config.mode === 'review') return config.ids.map(id => QUESTION_BY_ID.get(id)).filter(Boolean);
+  if (config.mode === 'review') {
+    return shuffled(config.ids.map(id => QUESTION_BY_ID.get(id)).filter(Boolean));
+  }
+  const level = LEVELS[config.level - 1];
   const methods = config.mode === 'focus'
     ? (config.method === 'mix' ? METHOD_KEYS : [config.method])
-    : LEVELS[config.level - 1].methods;
-  const groups = methods.map(method => {
-    const pool = BANK.filter(q => q.method === method);
-    for (let index = pool.length - 1; index > 0; index--) {
-      const other = Math.floor(Math.random() * (index + 1));
-      [pool[index],pool[other]] = [pool[other],pool[index]];
-    }
-    return pool;
+    : level.methods;
+  const weightedPools = methods.flatMap(method => {
+    const pool = shuffled(BANK.filter(q => q.method === method));
+    const weight = config.mode === 'focus' ? 1 : (level.methodWeights?.[method] || 1);
+    return Array(weight).fill(pool);
   });
-  const order = LEVELS[config.level - 1].order || groups.map((_,index) => index);
-  const first = Math.floor(Math.random() * order.length);
-  return Array.from({length:config.length}, (_,index) => groups[order[(first + index) % order.length]].shift());
+  const deck = [];
+  while (deck.length < config.length) {
+    const available = weightedPools.filter(pool => pool.length);
+    if (!available.length) break;
+    const pool = available[Math.floor(Math.random() * available.length)];
+    deck.push(pool.pop());
+  }
+  return deck;
 }
 
 const BEAD_ASSETS = JSON.parse(document.getElementById('bead-assets').textContent);
