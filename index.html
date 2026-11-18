@@ -166,6 +166,10 @@ summary{cursor:pointer;padding:8px}
 .tutor-output .actions{margin-top:10px}
 .tutor-output .button{min-height:47px}
 .tutor-output .button:disabled{opacity:.48}
+
+.parents-guide-text{margin:0 0 9px;padding:clamp(13px,3vw,21px);background:#fffdf8f7;border:1px solid white;border-radius:16px;line-height:1.74;font-size:.94rem;font-weight:500;overflow-wrap:anywhere}
+.parents-guide-text p+p{margin-top:.75em}
+.parents-guide>summary{min-height:44px}
 </style>
 </head>
 <body>
@@ -578,7 +582,13 @@ function home() {
     items.map(([icon,label,action,tone]) => button('<span class="icon" aria-hidden="true">' + icon + '</span>' + label,
       action,'card ' + tone)).join('') + '</nav>' +
     '<details><summary>あそびかた</summary><div class="guide">' + mascot('guide') +
-    '<p>そろばんの たまを みてね。つぎに たす・ひくときの おやくそくを 4つから えらぼう！</p></div></details>');
+    '<p>そろばんの たまを みてね。つぎに たす・ひくときの おやくそくを 4つから えらぼう！</p></div></details>' +
+    '<details class="parents-guide"><summary>保護者の方へ</summary><div class="parents-guide-text">' +
+    '<p>おうちでそろばんの練習をしていて、「ここからどの珠を動かせばいいんだろう？」と手が止まったときや、何度やっても答えが合わないときは、<strong>「そろばんの うごかしかた」</strong>をご利用ください。</p>' +
+    '<p>問題を入力すると、動かす珠とその順番が一手ずつ表示されます。手元のそろばんでも同じように動かしてみましょう。答えが合わないときは、初めの数から一手ずつ画面と見比べると、どこで珠の動きが違ったかを確かめられます。</p>' +
+    '<p>動かし方がわかったら、<strong>画面を閉じて、同じ問題をはじめから自分で解いてみましょう。</strong> 途中でまた手が止まったら、その一手を確かめて、もう一度試してみてください。</p>' +
+    '<p>自分で次の珠を選んで動かせたときは、ぜひ「今、自分でできたね！」と声をかけてあげてください。</p>' +
+    '</div></details>');
 }
 let tutorCalculation = null;
 let tutorStepIndex = 0;
