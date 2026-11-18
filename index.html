@@ -215,6 +215,7 @@ summary{cursor:pointer;padding:8px}
 .combination-history-table th:first-child{text-align:left}
 .combination-history-table th small{display:block;color:var(--muted);font-size:.83em}
 .combination-history summary{min-height:44px}
+.medal-group{margin-top:18px}.medal-count{font-size:.86rem;color:var(--muted);margin-top:4px}.combination-medal-notice{font-size:.9rem;margin:10px auto}.medal{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -535,8 +536,37 @@ const MEDALS = [
   ['change','✨','へんしんマスター','へんしんで 20もん せいかい',r => r.methods.change.correct >= 20],
   ['three','🌱','3にちれんしゅう','3にち れんしゅうする',r => Object.keys(r.days).length >= 3],
   ['seven','🌷','7にちれんしゅう','7にち れんしゅうする',r => Object.keys(r.days).length >= 7],
-  ['hundred','🏆','100もんせいかい','あわせて 100もん せいかい',r => r.correct >= 100]
+  ['hundred','🏆','100もんせいかい','あわせて 100もん せいかい',r => r.correct >= 100],
+  ['plays-ten','🎒','ぼうけん 10かい','さいごまで 10かい あそぶ',r => r.plays >= 10],
+  ['streak-ten','⭐','10れんぞくせいかい','10もん つづけて せいかい',r => r.streak >= 10],
+  ['right-three-hundred','🌟','300もんせいかい','あわせて 300もん せいかい',r => r.correct >= 300],
+  ['level-five','🚀','レベル5に とうちゃく','レベル5を ひらく',r => r.unlocked >= 5]
 ];
+
+const COMBINATION_MEDALS = [
+  ['combo-first','🧩','くみあわせ デビュー','10もん れんしゅうを 1かい おえる',s => s.rounds >= 1],
+  ['combo-friend','🔵','10のおともだち まんてん','10のおともだちで 10もん ぜんぶ せいかい',s => s.perfectModes.has('friend')],
+  ['combo-pair','🔴','5のおあいてさん まんてん','5のおあいてさんで 10もん ぜんぶ せいかい',s => s.perfectModes.has('pair')],
+  ['combo-change','🌸','へんしん まんてん','へんしんで 10もん ぜんぶ せいかい',s => s.perfectModes.has('change')],
+  ['combo-mix','🌈','ミックス まんてん','ミックスで 10もん ぜんぶ せいかい',s => s.perfectModes.has('mix')],
+  ['combo-three-kinds','👑','3しゅるい まんてん','3しゅるいの れんしゅうで それぞれ まんてん',s => ['friend','pair','change'].every(mode => s.perfectModes.has(mode))],
+  ['combo-ten-rounds','🏅','くみあわせ 10かい','10もん れんしゅうを 10かい おえる',s => s.rounds >= 10],
+  ['combo-hundred-right','🎯','くみあわせ 100もん','くみあわせで あわせて 100もん せいかい',s => s.correct >= 100],
+  ['combo-three-days','🌱','くみあわせ 3にち','3にち れんしゅうする',s => s.days >= 3],
+  ['combo-fast-mix','⚡','はやわざ ミックス','ミックスで 20びょう いないに 10もん ぜんぶ せいかい',s => s.fastMix]
+];
+function combinationMedalIds(history) {
+  const perfect = history.filter(entry => entry.correct === 10 && entry.total === 10);
+  const stats = {
+    rounds:history.length,
+    correct:history.reduce((sum,entry) => sum+entry.correct,0),
+    perfectModes:new Set(perfect.map(entry => entry.mode)),
+    days:new Set(history.map(entry => entry.date)).size,
+    fastMix:perfect.some(entry => entry.mode === 'mix' && entry.elapsedMs <= 20000)
+  };
+  return COMBINATION_MEDALS.filter(([,,,,earned]) => earned(stats)).map(([id]) => id);
+}
+
 function award() {
   const added = MEDALS.filter(([id,,,,earned]) => !record.medals.includes(id) && earned(record)).map(([id]) => id);
   record.medals.push(...added);
@@ -796,7 +826,7 @@ function answerCombination(answer) {
     chime('right');
     celebration(10);
   }
-  if (round.index+1 === round.deck.length) saveCombinationResult(round);
+  if (round.index+1 === round.deck.length) round.gained = saveCombinationResult(round);
   for (const key of app.querySelectorAll('.combination-keys button')) {
     key.disabled = true;
     if (key.dataset.action === 'combo-answer:'+question.answer) key.classList.add('combination-right');
@@ -825,14 +855,18 @@ function nextCombination() {
     return;
   }
   const perfect = round.correct === round.deck.length;
+  recentMedals = round.gained || [];
+  const medalNotice = recentMedals.length ? '<p class="center combination-medal-notice">🏅 メダルゲット！<br>' +
+    COMBINATION_MEDALS.filter(([id]) => recentMedals.includes(id)).map(medal => medal[2]).join('・') + '</p>' : '';
   section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
     '<div class="guide">' + mascot('reward') + '<p class="combination-formula">' +
     round.deck.length + ' もんの うち ' + round.correct + ' もん せいかい</p></div>' +
-    '<p class="combination-result-time">タイム ' + combinationTime(round.elapsedMs) + '</p><div class="actions">' +
+    '<p class="combination-result-time">タイム ' + combinationTime(round.elapsedMs) + '</p>' + medalNotice + '<div class="actions">' +
     button('もういちど あそぶ','combo-start:'+round.mode,'button primary') +
-    button('れんしゅうを えらぶ','combo-menu') + button('きろくをみる','records') + button('ホームにもどる','home') +
+    button('れんしゅうを えらぶ','combo-menu') + button('きろくをみる','records') +
+    (recentMedals.length ? button('メダルを みる','medals') : '') + button('ホームにもどる','home') +
     '</div>',0,'combination-panel');
-  if (perfect) {
+  if (perfect || recentMedals.length) {
     chime('win');
     celebration(38);
   }
@@ -844,16 +878,28 @@ const combinationTime = milliseconds => {
   const tenths = Math.round(milliseconds / 100);
   return clock(tenths / 10) + '.' + (tenths % 10);
 };
+function playerCombinationHistory() {
+  const player = accountList().find(entry => entry.id === activePlayer.id);
+  return player?.combinationHistory || [];
+}
+
 function saveCombinationResult(round) {
   const result = {mode:round.mode,date:today(),correct:round.correct,total:round.deck.length,elapsedMs:round.elapsedMs};
-  persistPlayers(accountList().map(player => player.id === activePlayer.id
-    ? {...player,combinationHistory:[...(player.combinationHistory || []),result]}
-    : player));
+  let gained = [];
+  const entries = accountList().map(player => {
+    if (player.id !== activePlayer.id) return player;
+    const previous = player.combinationHistory || [];
+    const history = [...previous,result];
+    const oldMedals = combinationMedalIds(previous);
+    gained = combinationMedalIds(history).filter(id => !oldMedals.includes(id));
+    return {...player,combinationHistory:history};
+  });
+  persistPlayers(entries);
+  return gained;
 }
 
 function combinationRecords() {
-  const player = accountList().find(entry => entry.id === activePlayer.id);
-  const history = [...(player?.combinationHistory || [])].reverse();
+  const history = [...playerCombinationHistory()].reverse();
   const table = entries => '<table class="combination-history-table"><thead><tr>' +
     '<th scope="col">れんしゅう</th><th scope="col">○の かず</th><th scope="col">タイム</th></tr></thead><tbody>' +
     entries.map(entry => '<tr><th scope="row"><span>' + combinationModeTitle(entry.mode) +
@@ -882,7 +928,8 @@ function selectPlayer(id) {
   if (!player) return showPlayers();
   activePlayer = player;
   record = player.record;
-  recentMedals = [];
+  recentMedals = award();
+  if (recentMedals.length) save();
   updateSound();
   home();
 }
@@ -1125,15 +1172,21 @@ function finish() {
   celebration(perfect ? 46 : 16);
 }
 function medals() {
-  section('メダルコレクション','<div class="guide">' + mascot('reward') +
-    '<p>' + record.medals.length + ' / ' + MEDALS.length + ' こ あつめたよ！</p></div><div class="medals">' +
-    MEDALS.map(([id,icon,name,hint]) => {
-      const earned = record.medals.includes(id);
-      return '<div class="medal' + (earned ? '' : ' locked') + (recentMedals.includes(id) ? ' just' : '') +
-        '"><i aria-hidden="true">' + icon + '</i><strong>' + name + '</strong><small>' +
-        (earned ? 'ゲット！' : hint) + '</small></div>';
-    }).join('') + '</div>');
+  const comboMedals = combinationMedalIds(playerCombinationHistory());
+  const showGroup = (title,list,earned) => '<section class="medal-group"><h3 class="center">' +
+    title + '</h3><p class="center medal-count">' + earned.length + ' / ' + list.length +
+    '</p><div class="medals">' + list.map(([id,icon,name,hint]) => {
+      const unlocked = earned.includes(id);
+      return '<div class="medal' + (unlocked ? '' : ' locked') + (recentMedals.includes(id) ? ' just' : '') +
+        '" data-medal="' + id + '"><i aria-hidden="true">' + icon + '</i><strong>' + name + '</strong><small>' +
+        (unlocked ? 'ゲット！' : hint) + '</small></div>';
+    }).join('') + '</div></section>';
+  section('メダルコレクション','<div class="guide">' + mascot('reward') + '<p>' +
+    (record.medals.length + comboMedals.length) + ' / ' + (MEDALS.length + COMBINATION_MEDALS.length) +
+    ' こ あつめたよ！</p></div>' + showGroup('そろばんの れんしゅう',MEDALS,record.medals) +
+    showGroup('くみあわせれんしゅう',COMBINATION_MEDALS,comboMedals));
 }
+
 function records() {
   const pending = Object.values(record.mistakes).filter(q => q.pending).length;
   section('きろくをみる','<div class="summary">' +
@@ -1142,7 +1195,7 @@ function records() {
     metric('さいこう れんぞく',record.streak+'もん') + metric('れんしゅうした ひ',Object.keys(record.days).length+'にち') +
     metric('きょうの もんだい',(record.days[today()] || 0)+'もん') +
     metric('ふくしゅう できる もんだい',pending+'もん') +
-    metric('あつめた メダル',record.medals.length+'こ') + '</div><h3 class="center">おやくそくごとの せいかいりつ</h3>' +
+    metric('あつめた メダル',(record.medals.length+combinationMedalIds(playerCombinationHistory()).length)+'こ') + '</div><h3 class="center">おやくそくごとの せいかいりつ</h3>' +
     '<div class="method-stats">' + METHOD_KEYS.map(key => {
       const info = record.methods[key];
       return metric(METHODS[key],info.total ? accuracy(info.correct,info.total)+'%（'+info.correct+'/'+info.total+'）' : '—');
