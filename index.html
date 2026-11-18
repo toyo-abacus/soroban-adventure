@@ -127,6 +127,19 @@ summary{cursor:pointer;padding:8px}
  .choice{min-height:45px}.home-hero{padding-top:6px}.cast .mascot{max-height:95px}.card{min-height:48px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition:none!important}}
+
+.player-bar{display:flex;justify-content:center;margin:9px auto 13px}
+.player-switch{display:flex;align-items:center;gap:8px;max-width:100%;background:#fffdf5;border:1px solid white;font-size:.87rem}
+.player-switch span{display:block;max-width:13em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-switch small{color:#345689;font-size:.78rem}
+.player-list,.player-form{width:min(100%,510px);margin:12px auto}
+.player-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;margin:11px 0}
+.player-row .stage{overflow-wrap:anywhere}
+.player-row .pill{font-size:.82rem}
+.player-form label{display:block;margin-bottom:7px}
+.player-form input{width:100%;min-height:48px;border:2px solid #a9bedf;border-radius:12px;padding:9px 12px;font:inherit;background:white;color:var(--ink)}
+.player-form input:focus-visible{outline:2px solid #3854c2;outline-offset:2px}
+#player-error{color:#92214d;margin-top:6px;font-size:.88rem}
 </style>
 </head>
 <body>
@@ -303,7 +316,8 @@ function board(value, accessibleLabel = 'いまの そろばん') {
 
 const $ = id => document.getElementById(id);
 const app = $('app');
-const STORAGE_KEY = 'toyo-soroban-adventure-v1';
+const LEGACY_STORAGE_KEY = 'toyo-soroban-adventure-v1';
+const STORAGE_KEY = 'toyo-soroban-adventure-players-v1';
 const today = () => {
   const d = new Date();
   return [d.getFullYear(), d.getMonth()+1, d.getDate()].map(v => String(v).padStart(2,'0')).join('-');
@@ -313,15 +327,40 @@ const freshRecord = () => ({
   days:{}, methods:Object.fromEntries(METHOD_KEYS.map(k => [k,{total:0,correct:0}])),
   mistakes:{}, medals:[], bestByMode:{}, levelStars:{}, perfect:0
 });
+let players = [];
+let activePlayer = null;
 let record = freshRecord();
-function storageWarning() { $('storage-note').classList.remove('hidden'); }
+let storageFailed = false;
+
+function storageWarning() {
+  storageFailed = true;
+  $('storage-note').classList.remove('hidden');
+}
+function readPlayers() {
+  if (storageFailed) return null;
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+  return Array.isArray(saved?.players) ? saved.players : null;
+}
+function persistPlayers(entries) {
+  players = entries;
+  if (storageFailed) return;
+  try { localStorage.setItem(STORAGE_KEY,JSON.stringify({players})); }
+  catch { storageWarning(); }
+}
 try {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) record = {...record,...JSON.parse(saved)};
+  const previous = readPlayers();
+  if (previous) {
+    players = previous;
+  } else {
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || 'null');
+    if (legacy?.total || legacy?.plays || legacy?.medals?.length || legacy?.unlocked > 1) {
+      persistPlayers([{id:'legacy',name:'プレイヤー1',record:{...freshRecord(),...legacy}}]);
+    }
+  }
 } catch { storageWarning(); }
 function save() {
-  try { localStorage.setItem(STORAGE_KEY,JSON.stringify(record)); }
-  catch { storageWarning(); }
+  if (!activePlayer) return;
+  persistPlayers(accountList().map(player => player.id === activePlayer.id ? {...player,record} : player));
 }
 
 const MEDALS = [
@@ -403,7 +442,8 @@ function screen(html,level=0) {
   $('particles').replaceChildren();
   app.innerHTML = html;
   document.body.dataset.level = level;
-  $('home').classList.toggle('hidden',level === 0 && Boolean(app.querySelector('.home-hero')));
+  $('home').classList.toggle('hidden',!activePlayer || Boolean(app.querySelector('.home-hero')));
+  $('sound').classList.toggle('hidden',!activePlayer);
   window.scrollTo(0,0);
 }
 function section(title,content,level=0,classes='') {
@@ -412,6 +452,7 @@ function section(title,content,level=0,classes='') {
 }
 function home() {
   run = null;
+  if (!activePlayer) return showPlayers();
   const items = [
     ['🐾','れんしゅうする','setup:study','t1'], ['🏁','10もんチャレンジ','setup:challenge','t2'],
     ['⚡','スピードゲーム','setup:speed','t3'], ['🎯','にがてれんしゅう','setup:focus','t4'],
@@ -419,12 +460,82 @@ function home() {
   ];
   screen('<section class="home-hero"><h1 class="title">そろばんのおやくそく<br><strong>大冒険！</strong></h1>' +
     '<p class="subtitle">おともだち・おあいてさん・へんしんを マスターしよう！</p>' + cast() +
-    '</section><nav class="menu" aria-label="あそぶメニュー">' +
+    '</section><div class="player-bar">' + button('<span>' + escapeText(activePlayer.name) + '</span><small>きりかえ</small>','players','pill player-switch') +
+    '</div><nav class="menu" aria-label="あそぶメニュー">' +
     items.map(([icon,label,action,tone]) => button('<span class="icon" aria-hidden="true">' + icon + '</span>' + label,
       action,'card ' + tone)).join('') + '</nav>' +
     '<details><summary>あそびかた</summary><div class="guide">' + mascot('guide') +
     '<p>そろばんの たまを みてね。つぎに たす・ひくときの おやくそくを 4つから えらぼう！</p></div></details>');
 }
+const accountList = () => {
+  try {
+    const stored = readPlayers();
+    if (stored) players = stored;
+  } catch { storageWarning(); }
+  return players;
+};
+const escapeText = value => String(value).replace(/[&<>"']/g, char => ({
+  '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+})[char]);
+function selectPlayer(id) {
+  const player = accountList().find(entry => entry.id === id);
+  if (!player) return showPlayers();
+  activePlayer = player;
+  record = player.record;
+  recentMedals = [];
+  updateSound();
+  home();
+}
+function showPlayers() {
+  const entries = accountList();
+  section('だれが あそぶ？',
+    '<div class="guide">' + mascot('guide') + '<p>' +
+    (entries.length ? 'じぶんの なまえを えらぼう！' : 'なまえを いれて、ぼうけんを はじめよう！') +
+    '</p></div>' +
+    (entries.length ? '<div class="player-list">' + entries.map((player,index) =>
+      '<div class="player-row">' + button(escapeText(player.name), 'player:' + player.id, 'card stage t' + (index%5+1)) +
+      button('なまえを かえる','rename:' + player.id,'pill') + '</div>').join('') + '</div>' : '') +
+    (entries.length ? '<div class="actions">' + button('＋ あたらしい なまえ','new-player') +
+      (activePlayer ? button('もどる','home') : '') + '</div>' : playerForm()));
+}
+function playerForm(player) {
+  return '<form id="player-form" class="player-form" data-player="' + (player?.id || '') + '">' +
+    '<label for="player-name">なまえ・ニックネーム</label>' +
+    '<input id="player-name" name="name" type="text" maxlength="20" required autocomplete="off" value="' +
+    escapeText(player?.name || '') + '">' +
+    '<p id="player-error" role="alert"></p><div class="actions">' +
+    '<button class="button primary" type="submit">' + (player ? 'ほぞんする' : 'あそぶ') + '</button>' +
+    (player || players.length ? button('もどる','players') : '') + '</div></form>';
+}
+function editPlayer(id) {
+  const player = accountList().find(entry => entry.id === id);
+  section(player ? 'なまえを かえる' : 'あたらしい プレイヤー', playerForm(player));
+  $('player-name').focus();
+}
+app.addEventListener('submit',event => {
+  const form = event.target;
+  if (form.id !== 'player-form') return;
+  event.preventDefault();
+  const input = $('player-name');
+  const name = input.value.trim();
+  const entries = accountList();
+  if (!name || entries.some(player => player.id !== form.dataset.player &&
+      player.name.normalize('NFKC').toLowerCase() === name.normalize('NFKC').toLowerCase())) {
+    $('player-error').textContent = name ? 'おなじ なまえが あるよ。べつの なまえに しよう。' : 'なまえを いれてね。';
+    input.focus();
+    return;
+  }
+  if (form.dataset.player) {
+    persistPlayers(entries.map(player => player.id === form.dataset.player ? {...player,name} : player));
+    if (activePlayer?.id === form.dataset.player) activePlayer.name = name;
+    showPlayers();
+    return;
+  }
+  const id = Array.from(crypto.getRandomValues(new Uint32Array(2)), value => value.toString(36)).join('-');
+  persistPlayers([...entries,{id,name,record:freshRecord()}]);
+  selectPlayer(id);
+});
+
 function setup(mode) {
   if (mode === 'focus') {
     const options = [...METHOD_KEYS.filter(k => k !== 'direct'),'mix'];
@@ -652,6 +763,10 @@ app.addEventListener('click',event => {
   const [action,value,extra] = trigger.dataset.action.split(':');
   switch (action) {
     case 'home': home(); break;
+    case 'players': showPlayers(); break;
+    case 'player': selectPlayer(value); break;
+    case 'new-player': editPlayer(); break;
+    case 'rename': editPlayer(value); break;
     case 'setup': setup(value); break;
     case 'level':
       if (Number(extra) > record.unlocked) return;
@@ -675,8 +790,8 @@ app.addEventListener('click',event => {
     case 'records': records(); break;
   }
 });
-updateSound();
-home();
+if (players.length === 1) selectPlayer(players[0].id);
+else showPlayers();
 
 </script>
 </body>
