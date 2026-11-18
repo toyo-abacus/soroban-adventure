@@ -140,6 +140,32 @@ summary{cursor:pointer;padding:8px}
 .player-form input{width:100%;min-height:48px;border:2px solid #a9bedf;border-radius:12px;padding:9px 12px;font:inherit;background:white;color:var(--ink)}
 .player-form input:focus-visible{outline:2px solid #3854c2;outline-offset:2px}
 #player-error{color:#92214d;margin-top:6px;font-size:.88rem}
+
+.tutor-panel{max-width:640px}
+.tutor-panel .lead{margin-bottom:12px}
+.tutor-inputs{display:grid;grid-template-columns:1fr minmax(65px,.66fr) 1fr;gap:8px}
+.tutor-inputs label{font-size:clamp(.64rem,3vw,.9rem);text-align:center;font-weight:800}
+.tutor-inputs input,.tutor-inputs select{display:block;width:100%;min-width:0;margin-top:5px;min-height:48px;border-radius:12px;border:2px solid #a9bedf;color:var(--ink);background:#fff;text-align:center;font:inherit;font-size:1.22rem;padding:6px 3px}
+.tutor-inputs input:focus-visible,.tutor-inputs select:focus-visible{outline:2px solid #3854c2;outline-offset:2px}
+.tutor-error:not(:empty){margin-top:12px;color:#92214d}
+.tutor-examples{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;margin:17px 0 12px}
+.tutor-examples span{font-size:.83rem;margin-right:5px}
+.tutor-examples .pill{min-height:44px;font-size:.88rem;background:#ebf4ff}
+.tutor-output:not(:empty){margin-top:14px;border-radius:20px;padding:12px;background:#f0f7ff;text-align:center}
+.tutor-caption{display:flex;justify-content:space-between;align-items:center;max-width:390px;margin:0 auto 6px;font-size:1.2rem}
+.tutor-caption span{font-size:.83rem;color:var(--muted)}
+.tutor-board{width:min(100%,390px)}
+.tutor-board .rod-accent{fill:#d9f4ff;stroke:#51aace;stroke-width:1.5}
+.tutor-board [data-changing] path:first-child{fill:#f7bd66;stroke:#7840a3;stroke-width:3}
+.tutor-text{margin-top:7px}
+.tutor-text h3{font-size:1.14rem;color:#172f59}
+.tutor-text>p{font-size:.82rem;color:var(--muted)}
+.tutor-text .tutor-step-note{color:var(--ink);font-size:.95rem;margin-top:4px}
+.tutor-step-note strong{color:#504098}
+.tutor-step-note small{display:block;font-size:.82em;margin-top:3px}
+.tutor-output .actions{margin-top:10px}
+.tutor-output .button{min-height:47px}
+.tutor-output .button:disabled{opacity:.48}
 </style>
 </head>
 <body>
@@ -297,31 +323,104 @@ function makeDeck(config) {
 
 const BEAD_ASSETS = JSON.parse(document.getElementById('bead-assets').textContent);
 const CHARACTERS = JSON.parse(document.getElementById('character-assets').textContent);
-function board(value, accessibleLabel = 'いまの そろばん') {
-  if (BEAD_ASSETS[value]) {
+
+const TUTOR_PLACES = ['一','十','百','千'];
+const TUTOR_LIMIT = 9999;
+const placeDigit = (value,place) => Math.floor(value / 10 ** place) % 10;
+
+function calculationSteps(start, operator, operand) {
+  const direction = operator === '+' ? 1 : -1;
+  if (!['+','-'].includes(operator) || ![start,operand].every(n => Number.isInteger(n) && inRange(n,TUTOR_LIMIT))) {
+    return {error:'0〜9999の かずを いれてね。'};
+  }
+  const answer = start + direction * operand;
+  if (answer < 0) return {error:'ひく かずは、はじめの かずより おおきく できないよ。'};
+  if (answer > TUTOR_LIMIT) return {error:'こたえが 9999までに なる しきを いれてね。'};
+
+  const steps = [];
+  let value = start;
+  function recordMove(place,move,method,extra) {
+    const [five,ones] = move;
+    const before = value;
+    value += (5 * five + ones) * 10 ** place;
+    const beads = [five ? '五(ご)だま' : '', ones ? '一(いち)だま ' + Math.abs(ones) + 'こ' : ''].filter(Boolean).join(' と ');
+    const together = five * ones < 0 ? ' いっしょに ' : ' ';
+    const arrow = five ? (five > 0 ? 'おろす' : 'あげる') : (ones > 0 ? 'あげる' : 'おろす');
+    const action = five * ones < 0 ? arrow : (five + ones > 0 ? 'いれる' : 'とる');
+    steps.push({place,five,ones,method,before,after:value,instruction:beads + 'を' + together + action + '。',extra});
+  }
+  function applyDigit(place, delta, extra='') {
+    const digit = placeDigit(value,place);
+    const sign = Math.sign(delta);
+    const move = directMove(delta);
+    if (canMove(digit,move)) {
+      recordMove(place,move,'direct',extra);
+      return;
+    }
+    const wanted = digit + delta;
+    if (inRange(wanted,9)) {
+      const exchange = [upper(wanted) - upper(digit),lower(wanted) - lower(digit)];
+      recordMove(place,exchange,'pair',extra);
+      return;
+    }
+    const complement = 10 - Math.abs(delta);
+    const opposite = directMove(-sign * complement);
+    const directFriend = canMove(digit,opposite);
+    const method = directFriend ? 'friend' : 'change';
+    const pair = [-sign,sign * (5 - complement)];
+    const unitsNote = Math.abs(delta) + 'の おともだちは ' + complement + '。' +
+      (sign > 0 ? 'この くらいで ' + complement + 'を ひくよ。' : 'この くらいに ' + complement + 'を たすよ。');
+    const carryNote = TUTOR_PLACES[place] + 'のくらいから ' +
+      (sign > 0 ? 'くりあがり。' : 'くりさがり。');
+    if (sign < 0) applyDigit(place+1,sign,carryNote);
+    recordMove(place,directFriend ? opposite : pair,method,[extra,unitsNote].filter(Boolean).join(' '));
+    if (sign > 0) applyDigit(place+1,sign,carryNote);
+  }
+  for (let place = TUTOR_PLACES.length - 1; place >= 0; place--) {
+    const digit = placeDigit(operand,place);
+    if (digit) applyDigit(place,direction * digit);
+  }
+  return {start,operator,operand,answer,steps};
+}
+
+function board(value, accessibleLabel = 'いまの そろばん', options = {}) {
+  const tutor = options.tutor === true;
+  const places = tutor ? ['せん','ひゃく','じゅう','いち'] : ['じゅう','いち'];
+  if (!tutor && BEAD_ASSETS[value]) {
     return '<img class="board board-img" src="' + BEAD_ASSETS[value] + '" alt="' + accessibleLabel + '">';
   }
-  const bead = (x,y,on,kind) => {
+  const bead = (x,y,on,kind,index,changing) => {
     const tone = on ? '#ed9638' : '#c8d2e4';
-    return '<g data-bead="' + kind + '" data-on="' + Number(on) + '">' +
-      '<path d="M' + x + ' ' + (y-11) + 'l23 9v4l-23 9-23-9v-4z" fill="' + tone +
-      '" stroke="' + (on ? '#a95b18' : '#687d9f') + '" stroke-width="1.5"/>' +
+    return '<g data-bead="' + kind + '" data-index="' + index + '" data-y="' + y + '" data-on="' + Number(on) +
+      '"' + (changing ? ' data-changing="true"' : '') + '><path d="M' + x + ' ' + (y-11) +
+      'l23 9v4l-23 9-23-9v-4z" fill="' + tone + '" stroke="' +
+      (on ? '#a95b18' : '#687d9f') + '" stroke-width="1.5"/>' +
       '<path d="M' + (x-16) + ' ' + (y-1) + 'l16-6 16 6" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="1.6"/></g>';
   };
-  const rods = [Math.floor(value / 10),value % 10].map((digit,index) => {
-    const x = 53 + index * 72;
+  const xAt = index => 53 + index * 72;
+  const rods = places.map((label,index) => {
+    const place = places.length - index - 1;
+    const digit = placeDigit(value,place);
+    const x = xAt(index);
     const count = lower(digit);
-    let shapes = bead(x,upper(digit) ? 46 : 25,Boolean(upper(digit)),'five');
-    for (let i = 0; i < 4; i++) shapes += bead(x,78 + 22 * i + (i < count ? 0 : 22),i < count,'one');
-    return '<g data-rod="' + index + '"><path d="M' + x + ' 12v167" stroke="#8395aa" stroke-width="3"/>' + shapes + '</g>';
+    const highlight = options.highlight?.place === place ? options.highlight : null;
+    const newCount = count + (highlight?.ones || 0);
+    let shapes = bead(x,upper(digit) ? 46 : 25,Boolean(upper(digit)),'five',0,Boolean(highlight?.five));
+    for (let i = 0; i < 4; i++) {
+      const changing = i >= Math.min(count,newCount) && i < Math.max(count,newCount);
+      shapes += bead(x,78 + 22 * i + (i < count ? 0 : 22),i < count,'one',i,changing);
+    }
+    const rodAccent = highlight ? '<rect class="rod-accent" x="' + (x-31) + '" y="12" width="62" height="166" rx="8"/>' : '';
+    return '<g data-rod="' + index + '">' + rodAccent + '<path d="M' + x + ' 12v167" stroke="#8395aa" stroke-width="3"/>' + shapes + '</g>';
   }).join('');
-  return '<svg class="board" viewBox="0 0 178 204" role="img" aria-label="' + accessibleLabel +
-    '" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="3" width="170" height="184" rx="14" fill="#355274"/>' +
-    '<rect x="13" y="11" width="152" height="168" rx="7" fill="#fff8e9"/>' + rods +
-    '<rect x="9" y="57" width="160" height="10" rx="2" fill="#355274"/>' +
-    '<circle cx="125" cy="62" r="2.4" fill="#fff7c4"/>' +
-    '<g fill="#52658a" text-anchor="middle" font-size="10" font-weight="700"><text x="53" y="201">じゅう</text>' +
-    '<text x="125" y="201">いち</text></g></svg>';
+  const width = 34 + 72 * places.length;
+  const labels = places.map((label,index) => '<text x="' + xAt(index) + '" y="201">' + label + '</text>').join('');
+  return '<svg class="board' + (tutor ? ' tutor-board' : '') + '" viewBox="0 0 ' + width + ' 204" role="img" aria-label="' + accessibleLabel +
+    '" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="3" width="' + (width-8) + '" height="184" rx="14" fill="#355274"/>' +
+    '<rect x="13" y="11" width="' + (width-26) + '" height="168" rx="7" fill="#fff8e9"/>' + rods +
+    '<rect x="9" y="57" width="' + (width-18) + '" height="10" rx="2" fill="#355274"/>' +
+    '<circle cx="' + xAt(places.length-1) + '" cy="62" r="2.4" fill="#fff7c4"/>' +
+    '<g fill="#52658a" text-anchor="middle" font-size="10" font-weight="700">' + labels + '</g></svg>';
 }
 
 </script>
@@ -470,7 +569,7 @@ function home() {
   const items = [
     ['🐾','れんしゅうする','setup:study','t1'], ['🏁','10もんチャレンジ','setup:challenge','t2'],
     ['⚡','スピードゲーム','setup:speed','t3'], ['🎯','にがてれんしゅう','setup:focus','t4'],
-    ['🏅','メダルコレクション','medals','t5'], ['📖','きろくをみる','records','']
+    ['🧮','そろばんの うごかしかた','tutor','t1'], ['🏅','メダルコレクション','medals','t5'], ['📖','きろくをみる','records','']
   ];
   screen('<section class="home-hero"><h1 class="title">そろばんのおやくそく<br><strong>大冒険！</strong></h1>' +
     '<p class="subtitle">おともだち・おあいてさん・へんしんを マスターしよう！</p>' + cast() +
@@ -481,6 +580,79 @@ function home() {
     '<details><summary>あそびかた</summary><div class="guide">' + mascot('guide') +
     '<p>そろばんの たまを みてね。つぎに たす・ひくときの おやくそくを 4つから えらぼう！</p></div></details>');
 }
+let tutorCalculation = null;
+let tutorStepIndex = 0;
+const TUTOR_EXAMPLES = [[49,'+',1],[50,'-',1],[99,'+',1],[100,'-',1],[999,'+',1],[1000,'-',1]];
+function tutor() {
+  section('そろばんの うごかしかた',
+    '<form id="tutor-form" novalidate><p class="center lead">0〜9999の かずを いれて、たまの うごきを みよう！</p>' +
+    '<div class="tutor-inputs"><label for="tutor-start">はじめの かず<input id="tutor-start" name="start" type="text" inputmode="numeric" maxlength="4" value="49"></label>' +
+    '<label for="tutor-sign">けいさん<select id="tutor-sign" name="sign"><option value="+">＋</option><option value="-">−</option></select></label>' +
+    '<label for="tutor-operand">たす・ひく かず<input id="tutor-operand" name="operand" type="text" inputmode="numeric" maxlength="4" value="1"></label>' +
+    '</div><div class="actions"><button class="button primary" type="submit">うごきかたを みる</button></div>' +
+    '<p class="tutor-error center" id="tutor-error" role="alert"></p></form>' +
+    '<div class="tutor-examples"><span>れいから えらぶ</span>' +
+    TUTOR_EXAMPLES.map(([a,op,b]) => button(a+(op==='+'?'＋':'−')+b,'tutor-example:'+a+':'+op+':'+b,'pill')).join('') +
+    '</div><div id="tutor-output" class="tutor-output"></div>',0,'tutor-panel');
+  startTutor();
+}
+
+function startTutor() {
+  const readNumber = id => {
+    const text = $(id).value.normalize('NFKC').trim();
+    return /^[0-9]{1,4}$/.test(text) ? Number(text) : NaN;
+  };
+  tutorCalculation = calculationSteps(readNumber('tutor-start'),$('tutor-sign').value,readNumber('tutor-operand'));
+  $('tutor-error').textContent = tutorCalculation.error || '';
+  if (tutorCalculation.error) {
+    $('tutor-output').replaceChildren();
+    return;
+  }
+  tutorStepIndex = 0;
+  drawTutorStep(0);
+}
+
+function drawTutorStep(index, moveFocus=false) {
+  if (!tutorCalculation || tutorCalculation.error) return;
+  const {steps,start,operator,operand,answer} = tutorCalculation;
+  if (index < 0 || index > steps.length) return;
+  const output = $('tutor-output');
+  const animate = index !== tutorStepIndex && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const previousYs = animate ? Array.from(output.querySelectorAll('[data-y]'),bead => Number(bead.dataset.y)) : [];
+  const next = steps[index];
+  const value = index ? steps[index-1].after : start;
+  const sign = operator === '+' ? '＋' : '−';
+  const heading = next ? 'つぎに うごかす たま' : 'こたえは ' + answer;
+  const note = next ?
+    '<p class="tutor-step-note"><strong>' + TUTOR_PLACES[next.place] + 'のくらい · ' + METHODS[next.method] +
+      '</strong><br>' + next.instruction + (next.extra ? '<small>' + next.extra + '</small>' : '') + '</p>' :
+    '<p class="tutor-step-note">' + (steps.length ? 'さいごの たまを たしかめよう。' : '0の けいさんは、たまは そのまま。') + '</p>';
+  output.innerHTML = '<div class="tutor-caption"><strong>' + start + ' ' + sign + ' ' + operand +
+    '</strong><span>' + index + ' / ' + steps.length + ' て</span></div>' +
+    board(value,'そろばん ' + value,{tutor:true,highlight:next}) +
+    '<div class="tutor-text" aria-live="polite"><p>いまの たま <strong>' + value + '</strong></p><h3>' + heading + '</h3>' + note + '</div>' +
+    '<div class="actions">' +
+    '<button type="button" class="button" data-action="tutor-step:'+(index-1)+'"'+(index ? '' : ' disabled')+'>← まえ</button>' +
+    (next ? button('たまを うごかす →','tutor-step:'+(index+1),'button primary') :
+      (steps.length ? button('はじめから','tutor-step:0','button primary') : '')) + '</div>';
+  tutorStepIndex = index;
+  if (animate && previousYs.length) {
+    output.querySelectorAll('[data-y]').forEach((bead,i) => {
+      const shift = previousYs[i] - Number(bead.dataset.y);
+      if (shift) bead.animate?.([{transform:'translateY('+shift+'px)'},{transform:'translateY(0)'}],
+        {duration:260,easing:'ease-out'});
+    });
+  }
+  if (moveFocus) output.querySelector('.button.primary')?.focus({preventScroll:true});
+}
+
+app.addEventListener('submit',event => {
+  if (event.target.id !== 'tutor-form') return;
+  event.preventDefault();
+  startTutor();
+  $('tutor-output').scrollIntoView({block:'nearest'});
+});
+
 const accountList = () => {
   try {
     const stored = readPlayers();
@@ -774,7 +946,7 @@ $('home').addEventListener('click',home);
 app.addEventListener('click',event => {
   const trigger = event.target.closest('button[data-action]');
   if (!trigger || trigger.disabled) return;
-  const [action,value,extra] = trigger.dataset.action.split(':');
+  const [action,value,extra,last] = trigger.dataset.action.split(':');
   switch (action) {
     case 'home': home(); break;
     case 'players': showPlayers(); break;
@@ -782,6 +954,15 @@ app.addEventListener('click',event => {
     case 'new-player': editPlayer(); break;
     case 'rename': editPlayer(value); break;
     case 'setup': setup(value); break;
+    case 'tutor': tutor(); break;
+    case 'tutor-example':
+      $('tutor-start').value = value;
+      $('tutor-sign').value = extra;
+      $('tutor-operand').value = last;
+      startTutor();
+      $('tutor-output').scrollIntoView({block:'nearest'});
+      break;
+    case 'tutor-step': drawTutorStep(Number(value),true); break;
     case 'level':
       if (Number(extra) > record.unlocked) return;
       if (value === 'speed' || Number(extra) === 5) speedSetup(Number(extra));
