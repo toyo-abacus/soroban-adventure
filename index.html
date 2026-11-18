@@ -737,7 +737,7 @@ function playGuide() {
     '<dt>くみあわせれんしゅう</dt><dd>10のおともだち、5のおあいてさん、へんしん、3しゅるい ミックスから えらぼう。10もん こたえると、○の かずと タイムが のこるよ。</dd>' +
     '<dt>そろばんを うごかしてみる</dt><dd>たまを タップするか、うえ・したに うごかそう。おなじ くらいの 五珠（ごだま）と 一珠（いちだま）は、ひとつずつ うごかして だいじょうぶ。<strong>10もん ぜんぶを ただしい じゅんばんで できたら、メダルが もらえて つぎの レベルが ひらくよ。</strong> レベル5は 50・100の くりあがりと くりさがりだよ。</dd>' +
     '<dt>メダルコレクション</dt><dd>あつめた メダルと、つぎに ゲットするための じょうけんを みられるよ。</dd>' +
-    '<dt>きろくをみる</dt><dd>せいかいの かずや、くみあわせれんしゅうの ○の かず・タイムが みられるよ。</dd>' +
+    '<dt>きろくをみる</dt><dd>くみあわせれんしゅうと、そろばんを うごかす れんしゅうの ○の かず・タイムが みられるよ。</dd>' +
     '</dl><p class="play-guide-player">きょうだいで あそぶときは、ホームの「きりかえ」から じぶんの なまえを えらぼう。</p>' +
     '</div></details>';
 }
@@ -1003,15 +1003,26 @@ function saveCombinationResult(round) {
 }
 
 function combinationRecords() {
-  const history = [...playerCombinationHistory()].reverse();
+  return practiceRecordsSection('combination-history-title','くみあわせれんしゅうの きろく',
+    playerCombinationHistory(),entry => combinationModeTitle(entry.mode));
+}
+
+function movePracticeRecords() {
+  const player = accountList().find(entry => entry.id === activePlayer.id);
+  return practiceRecordsSection('bead-history-title','そろばんを うごかした きろく',
+    player?.beadPracticeHistory || [],entry => 'レベル '+entry.level);
+}
+
+function practiceRecordsSection(id,title,entries,label) {
+  const history = [...entries].reverse();
   const table = entries => '<table class="combination-history-table"><thead><tr>' +
     '<th scope="col">れんしゅう</th><th scope="col">○の かず</th><th scope="col">タイム</th></tr></thead><tbody>' +
-    entries.map(entry => '<tr><th scope="row"><span>' + combinationModeTitle(entry.mode) +
+    entries.map(entry => '<tr><th scope="row"><span>' + label(entry) +
       '</span><small>' + escapeText(entry.date.replaceAll('-','/')) + '</small></th>' +
       '<td>' + entry.correct + ' / ' + entry.total + '</td><td>' + combinationTime(entry.elapsedMs) +
       '</td></tr>').join('') + '</tbody></table>';
-  return '<section class="combination-history" aria-labelledby="combination-history-title">' +
-    '<h3 class="center" id="combination-history-title">くみあわせれんしゅうの きろく</h3>' +
+  return '<section class="combination-history" aria-labelledby="'+id+'">' +
+    '<h3 class="center" id="'+id+'">'+title+'</h3>' +
     (history.length ? '<p class="center">もんだいに こたえた じかんの ごうけい</p>' + table(history.slice(0,10)) +
       (history.length > 10 ? '<details><summary>まえの きろくを みる</summary>' + table(history.slice(10)) + '</details>' : '') :
       '<p class="center">10もん こたえると、ここに きろくが のるよ。</p>') + '</section>';
@@ -1161,7 +1172,7 @@ function openMovePractice() {
 function startMovePractice(level) {
   if (!Number.isInteger(level) || level < 1 || level > MOVE_PRACTICE_LEVELS.length || level > movePracticeCleared()+1) return;
   const deck = movePracticeDeck(level).map(({start,delta}) => calculationSteps(start,delta>0?'+':'-',Math.abs(delta)));
-  movePractice = {level,deck,index:0,right:0,gained:[]};
+  movePractice = {level,deck,index:0,right:0,gained:[],elapsedMs:0,presentedAt:0};
   showMoveQuestion();
 }
 function currentMoveProblem() {
@@ -1181,6 +1192,7 @@ function showMoveQuestion() {
     '<div id="move-controls" class="actions">' + button('はじめの たまに もどす','move-reset') +
     button('レベルを えらぶ','move-menu') + '</div>',round.level,'move-practice-panel');
   renderMoveBoard();
+  round.presentedAt = performance.now();
 }
 function renderMoveBoard(focusBead) {
   const container = $('move-board');
@@ -1245,6 +1257,7 @@ function handleBead(bead,directionMatches=true,keyboard=false) {
     feedback.textContent = judgement==='partial' ? 'おなじ くらいの のこりの たまを うごかそう。' : 'つぎの たまを うごかそう。';
     return;
   }
+  round.elapsedMs += performance.now() - round.presentedAt;
   round.gained.push(...markPracticeDay());
   if (!round.failed) {
     round.right++;
@@ -1279,19 +1292,22 @@ function nextMoveProblem() {
   const cleared = movePracticeCleared();
   const medal = perfect && round.level>cleared ? MOVE_PRACTICE_MEDALS[round.level-1] : null;
   recentMedals = medal ? [...round.gained,medal[0]] : round.gained;
-  if (medal) {
-    persistPlayers(accountList().map(player => player.id===activePlayer.id ?
-      {...player,beadPracticeCleared:round.level} : player));
-  }
+  const attempt = {date:today(),level:round.level,correct:round.right,total:round.deck.length,elapsedMs:round.elapsedMs};
+  persistPlayers(accountList().map(player => player.id===activePlayer.id ? {
+    ...player,beadPracticeCleared: medal ? round.level : (player.beadPracticeCleared || 0),
+    beadPracticeHistory:[...(player.beadPracticeHistory || []),attempt]
+  } : player));
   const finalLevel = round.level===MOVE_PRACTICE_LEVELS.length;
   const message = perfect ? (finalLevel ? 'ぜんぶの レベルを クリア！' : medal ? 'レベル '+(round.level+1)+' が ひらいたよ！' : 'レベル '+round.level+' クリア！') :
     '10もん ぜんぶ せいかいで レベルクリア！';
   section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
     '<div class="guide">'+mascot('reward')+'<p class="center"><strong>○ '+round.right+' / '+round.deck.length+'</strong><br>' +
-    message+'</p></div>' + practiceMedalNotice(recentMedals) +
+    message+'</p></div><p class="combination-result-time">タイム '+combinationTime(round.elapsedMs)+'</p>' +
+    practiceMedalNotice(recentMedals) +
     '<div class="actions">'+ (recentMedals.length ? button('メダルを みる','medals') : '') +
     (perfect && !finalLevel ? button('つぎの レベル →','move-level:'+(round.level+1),'button primary') : '') +
-    button('もういちど れんしゅう','move-level:'+round.level) + button('レベルを えらぶ','move-menu') + '</div>',
+    button('もういちど れんしゅう','move-level:'+round.level) + button('レベルを えらぶ','move-menu') +
+    button('きろくをみる','records') + '</div>',
     round.level,'move-practice-panel');
   if (perfect || recentMedals.length) {
     chime('win');
@@ -1550,7 +1566,7 @@ function records() {
     '<div class="method-stats">' + METHOD_KEYS.map(key => {
       const info = record.methods[key];
       return metric(METHODS[key],info.total ? accuracy(info.correct,info.total)+'%（'+info.correct+'/'+info.total+'）' : '—');
-    }).join('') + '</div>' + combinationRecords() + '<div class="actions">' + (pending ? button('まちがえた もんだい','review:saved','button primary') : '') +
+    }).join('') + '</div>' + combinationRecords() + movePracticeRecords() + '<div class="actions">' + (pending ? button('まちがえた もんだい','review:saved','button primary') : '') +
     button('ホームにもどる','home') + '</div>');
 }
 
