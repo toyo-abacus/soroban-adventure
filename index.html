@@ -216,6 +216,34 @@ summary{cursor:pointer;padding:8px}
 .combination-history-table th small{display:block;color:var(--muted);font-size:.83em}
 .combination-history summary{min-height:44px}
 .medal-group{margin-top:18px}.medal-count{font-size:.86rem;color:var(--muted);margin-top:4px}.combination-medal-notice{font-size:.9rem;margin:10px auto}.medal{overflow-wrap:anywhere}
+
+.menu .abacus-entry{grid-column:1/-1;display:grid;grid-template-columns:57px minmax(0,1fr) auto;justify-items:start;align-items:center;gap:10px;text-align:left;padding:9px 12px;min-height:70px;border-color:#c3e5df;background:linear-gradient(110deg,#d8f5e9,#e7f5ff);box-shadow:0 4px 0 #a5c8c7,0 4px 12px #24416318}
+.abacus-entry .abacus-entry-icon{display:grid;place-items:center;width:54px;height:53px;border-radius:14px;background:#ffffffaa}
+.abacus-entry .abacus-entry-icon .board{width:38px;height:45px;margin:0}
+.abacus-entry .abacus-entry-name{display:block;color:#203365;font-size:clamp(1rem,4.1vw,1.25rem);line-height:1.3}
+.abacus-entry .abacus-entry-caption{display:block;color:#415a70;font-size:clamp(.71rem,2.8vw,.91rem);margin-top:4px;font-weight:650}
+.abacus-entry .abacus-entry-arrow{display:grid;place-items:center;border-radius:50%;width:29px;height:29px;background:#fffaf0;color:#28565c;font-size:1.03rem}
+
+.menu button.abacus-entry{cursor:pointer}
+.move-practice-panel{max-width:560px}
+.move-progress{display:flex;justify-content:space-between;gap:7px;margin:12px 0 6px;font-size:.86rem;color:var(--muted)}
+.move-expression{text-align:center;font-weight:900;font-size:clamp(1.65rem,7vw,2.45rem);line-height:1.2;margin:6px 0 8px;color:var(--navy);font-variant-numeric:tabular-nums}
+.move-board .board{width:min(100%,285px);max-height:43vh;touch-action:none;user-select:none}
+.move-board [data-move-place]{cursor:grab;outline:none}
+.move-board [data-move-place]:active{cursor:grabbing}
+.move-board [data-move-place]:focus-visible path:first-child{stroke:#5625bb;stroke-width:3}
+.move-feedback{text-align:center;margin:8px auto 0;min-height:2.6em;font-size:.9rem;line-height:1.35;color:var(--muted)}
+.move-try{color:#8b374c;font-weight:800}.move-done{color:#1b664a;font-weight:800}
+.move-practice-panel .guide strong{font-size:1.45rem}
+
+.play-guide>summary{min-height:44px}
+.play-guide-content{padding:clamp(13px,3vw,21px);border:1px solid #fff;border-radius:16px;background:#fffdf9f7}
+.play-guide-list{display:grid;grid-template-columns:1fr;gap:0;margin:0}
+.play-guide-list dt{font-size:1rem;font-weight:850;color:var(--navy)}
+.play-guide-list dd{font-size:.88rem;line-height:1.57;margin:4px 0 10px;padding-bottom:10px;border-bottom:1px solid #dfebee;font-weight:550}
+.play-guide-list dd:last-child{margin-bottom:0}
+.play-guide-list dd strong{font-weight:850}
+.play-guide-player{margin:10px 0 0;font-size:.84rem;font-weight:700;color:#3a5570}
 </style>
 </head>
 <body>
@@ -435,13 +463,16 @@ function calculationSteps(start, operator, operand) {
 
 function board(value, accessibleLabel = 'いまの そろばん', options = {}) {
   const tutor = options.tutor === true;
-  const places = tutor ? ['せん','ひゃく','じゅう','いち'] : ['じゅう','いち'];
-  if (!tutor && BEAD_ASSETS[value]) {
+  const interactive = options.interactive === true;
+  const places = tutor ? ['せん','ひゃく','じゅう','いち'] : options.threeDigits ? ['ひゃく','じゅう','いち'] : ['じゅう','いち'];
+  if (!tutor && !interactive && !options.threeDigits && BEAD_ASSETS[value]) {
     return '<img class="board board-img" src="' + BEAD_ASSETS[value] + '" alt="' + accessibleLabel + '">';
   }
-  const bead = (x,y,on,kind,index,changing) => {
+  const bead = (x,y,on,kind,index,changing,place) => {
     const tone = on ? '#ed9638' : '#c8d2e4';
-    return '<g data-bead="' + kind + '" data-index="' + index + '" data-y="' + y + '" data-on="' + Number(on) +
+    const placeAttrs = interactive ? ' role="button" tabindex="0" data-move-place="' + place + '" aria-label="' + TUTOR_PLACES[place] + 'のくらい ' +
+      (kind === 'five' ? '五珠' : '一珠 '+(index+1)+'こめ') + (on ? ' とる' : ' いれる') + '"' : '';
+    return '<g' + placeAttrs + ' data-bead="' + kind + '" data-index="' + index + '" data-y="' + y + '" data-on="' + Number(on) +
       '"' + (changing ? ' data-changing="true"' : '') + '><path d="M' + x + ' ' + (y-11) +
       'l23 9v4l-23 9-23-9v-4z" fill="' + tone + '" stroke="' +
       (on ? '#a95b18' : '#687d9f') + '" stroke-width="1.5"/>' +
@@ -455,17 +486,17 @@ function board(value, accessibleLabel = 'いまの そろばん', options = {}) 
     const count = lower(digit);
     const highlight = options.highlight?.place === place ? options.highlight : null;
     const newCount = count + (highlight?.ones || 0);
-    let shapes = bead(x,upper(digit) ? 46 : 25,Boolean(upper(digit)),'five',0,Boolean(highlight?.five));
+    let shapes = bead(x,upper(digit) ? 46 : 25,Boolean(upper(digit)),'five',0,Boolean(highlight?.five),place);
     for (let i = 0; i < 4; i++) {
       const changing = i >= Math.min(count,newCount) && i < Math.max(count,newCount);
-      shapes += bead(x,78 + 22 * i + (i < count ? 0 : 22),i < count,'one',i,changing);
+      shapes += bead(x,78 + 22 * i + (i < count ? 0 : 22),i < count,'one',i,changing,place);
     }
     const rodAccent = highlight ? '<rect class="rod-accent" x="' + (x-31) + '" y="12" width="62" height="166" rx="8"/>' : '';
     return '<g data-rod="' + index + '">' + rodAccent + '<path d="M' + x + ' 12v167" stroke="#8395aa" stroke-width="3"/>' + shapes + '</g>';
   }).join('');
   const width = 34 + 72 * places.length;
   const labels = places.map((label,index) => '<text x="' + xAt(index) + '" y="201">' + label + '</text>').join('');
-  return '<svg class="board' + (tutor ? ' tutor-board' : '') + '" viewBox="0 0 ' + width + ' 204" role="img" aria-label="' + accessibleLabel +
+  return '<svg class="board' + (tutor ? ' tutor-board' : '') + '" viewBox="0 0 ' + width + ' 204" role="' + (interactive ? 'group' : 'img') + '" aria-label="' + accessibleLabel +
     '" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="3" width="' + (width-8) + '" height="184" rx="14" fill="#355274"/>' +
     '<rect x="13" y="11" width="' + (width-26) + '" height="168" rx="7" fill="#fff8e9"/>' + rods +
     '<rect x="9" y="57" width="' + (width-18) + '" height="10" rx="2" fill="#355274"/>' +
@@ -567,8 +598,60 @@ function combinationMedalIds(history) {
   return COMBINATION_MEDALS.filter(([,,,,earned]) => earned(stats)).map(([id]) => id);
 }
 
+
+const PRACTICE_STREAK_MEDALS = [
+  ['seven-in-a-row','🌱',7],
+  ['ten-in-a-row','🍀',10],
+  ['fourteen-in-a-row','🌼',14],
+  ['twenty-in-a-row','🌟',20],
+  ['thirty-in-a-row','📅',30]
+].map(([id,icon,days]) => [id,icon,days+'にち れんぞくれんしゅう',
+  'どの れんしゅうでも '+days+'にち つづける',days]);
+
+function longestPracticeStreak(practiceRecord) {
+  const player = accountList().find(entry => entry.id === activePlayer.id);
+  const dates = new Set([
+    ...Object.keys(practiceRecord.days),
+    ...(player?.extraPracticeDays || []),
+    ...(player?.combinationHistory || []).map(round => round.date)
+  ]);
+  const dayNumbers = [...dates].map(date => Date.parse(date+'T00:00:00Z') / 86400000)
+    .filter(Number.isFinite).sort((a,b) => a-b);
+  let streak = 0;
+  let longest = 0;
+  let previous = NaN;
+  for (const day of dayNumbers) {
+    streak = day === previous+1 ? streak+1 : 1;
+    longest = Math.max(longest,streak);
+    previous = day;
+  }
+  return longest;
+}
+function markPracticeDay() {
+  const date = today();
+  const entries = accountList();
+  const player = entries.find(entry => entry.id === activePlayer.id);
+  const days = player?.extraPracticeDays || [];
+  if (!player || record.days[date] || days.includes(date)) return [];
+  persistPlayers(entries.map(entry => entry.id === player.id ? {...entry,extraPracticeDays:[...days,date]} : entry));
+  const gained = award();
+  if (gained.length) save();
+  return gained;
+}
+function practiceMedalNotice(ids) {
+  if (!ids.length) return '';
+  const titles = [...MEDALS,...COMBINATION_MEDALS,...MOVE_PRACTICE_MEDALS,...PRACTICE_STREAK_MEDALS].filter(([id]) => ids.includes(id))
+    .map(medal => medal[2]).join('・');
+  return '<p class="center combination-medal-notice">🏅 メダルゲット！<br>'+titles+'</p>';
+}
+
 function award() {
   const added = MEDALS.filter(([id,,,,earned]) => !record.medals.includes(id) && earned(record)).map(([id]) => id);
+  const pending = PRACTICE_STREAK_MEDALS.filter(([id]) => !record.medals.includes(id));
+  if (pending.length) {
+    const longest = longestPracticeStreak(record);
+    added.push(...pending.filter(([,,,,days]) => longest >= days).map(([id]) => id));
+  }
   record.medals.push(...added);
   return added;
 }
@@ -642,6 +725,23 @@ function section(title,content,level=0,classes='') {
   screen('<section class="panel ' + classes + '"><h2 tabindex="-1">' + title + '</h2>' + content + '</section>',level);
   app.querySelector('h2').focus({preventScroll:true});
 }
+
+function playGuide() {
+  return '<details class="play-guide"><summary>あそびかた</summary><div class="play-guide-content">' +
+    '<dl class="play-guide-list">' +
+    '<dt>れんしゅうする</dt><dd>そろばんの たまを みて、4つの おやくそくから えらぼう。</dd>' +
+    '<dt>10もんチャレンジ</dt><dd>10もんに ちょうせん。せいかいが つづくと、コンボで とくてんが ふえるよ。</dd>' +
+    '<dt>スピードゲーム</dt><dd>10もんか 20もんを えらぼう。はやく せいかいすると、ボーナスが つくよ。</dd>' +
+    '<dt>にがてれんしゅう</dt><dd>くりかえし れんしゅうしたい おやくそくを えらぼう。</dd>' +
+    '<dt>そろばんの うごかしかた</dt><dd>わからない もんだいを いれると、どの たまを うごかすか ひとてずつ みられるよ。</dd>' +
+    '<dt>くみあわせれんしゅう</dt><dd>10のおともだち、5のおあいてさん、へんしん、3しゅるい ミックスから えらぼう。10もん こたえると、○の かずと タイムが のこるよ。</dd>' +
+    '<dt>そろばんを うごかしてみる</dt><dd>たまを タップするか、うえ・したに うごかそう。おなじ くらいの 五珠（ごだま）と 一珠（いちだま）は、ひとつずつ うごかして だいじょうぶ。<strong>10もん ぜんぶを ただしい じゅんばんで できたら、メダルが もらえて つぎの レベルが ひらくよ。</strong> レベル5は 50・100の くりあがりと くりさがりだよ。</dd>' +
+    '<dt>メダルコレクション</dt><dd>あつめた メダルと、つぎに ゲットするための じょうけんを みられるよ。</dd>' +
+    '<dt>きろくをみる</dt><dd>せいかいの かずや、くみあわせれんしゅうの ○の かず・タイムが みられるよ。</dd>' +
+    '</dl><p class="play-guide-player">きょうだいで あそぶときは、ホームの「きりかえ」から じぶんの なまえを えらぼう。</p>' +
+    '</div></details>';
+}
+
 function home() {
   run = null;
   if (!activePlayer) return showPlayers();
@@ -654,10 +754,14 @@ function home() {
     '<p class="subtitle">おともだち・おあいてさん・へんしんを マスターしよう！</p>' + cast() +
     '</section><div class="player-bar">' + button('<span>' + escapeText(activePlayer.name) + '</span><small>きりかえ</small>','players','pill player-switch') +
     '</div><nav class="menu" aria-label="あそぶメニュー">' +
-    items.map(([icon,label,action,tone]) => button('<span class="icon" aria-hidden="true">' + icon + '</span>' + label,
+    items.map(([icon,label,action,tone]) => (action === 'medals' ?
+      '<button type="button" class="card abacus-entry" data-action="move-menu"><span class="abacus-entry-icon" aria-hidden="true">' + board(6) +
+      '</span><span><strong class="abacus-entry-name">そろばんを うごかしてみる</strong>' +
+      '<small class="abacus-entry-caption">がめんの たまを うごかして れんしゅう</small></span>' +
+      '<span class="abacus-entry-arrow" aria-hidden="true">→</span></button>' : '') +
+      button('<span class="icon" aria-hidden="true">' + icon + '</span>' + label,
       action,'card ' + tone)).join('') + '</nav>' +
-    '<details><summary>あそびかた</summary><div class="guide">' + mascot('guide') +
-    '<p>そろばんの たまを みてね。つぎに たす・ひくときの おやくそくを 4つから えらぼう！</p></div></details>' +
+    playGuide() +
     '<details class="parents-guide"><summary>保護者の方へ</summary><div class="parents-guide-text">' +
     '<p>おうちでそろばんの練習をしていて、「ここからどの珠を動かせばいいんだろう？」と手が止まったときや、何度やっても答えが合わないときは、<strong>「そろばんの うごかしかた」</strong>をご利用ください。</p>' +
     '<p>問題を入力すると、動かす珠とその順番が一手ずつ表示されます。手元のそろばんでも同じように動かしてみましょう。答えが合わないときは、初めの数から一手ずつ画面と見比べると、どこで珠の動きが違ったかを確かめられます。</p>' +
@@ -786,7 +890,7 @@ function openCombinations() {
 function startCombinations(mode) {
   const deck = combinationDeck(mode);
   if (!deck.length) return;
-  combinationRound = {mode,deck,index:0,correct:0,answered:false,elapsedMs:0,presentedAt:0};
+  combinationRound = {mode,deck,index:0,correct:0,answered:false,elapsedMs:0,presentedAt:0,gained:[]};
   showCombination();
 }
 
@@ -826,7 +930,8 @@ function answerCombination(answer) {
     chime('right');
     celebration(10);
   }
-  if (round.index+1 === round.deck.length) round.gained = saveCombinationResult(round);
+  round.gained.push(...markPracticeDay());
+  if (round.index+1 === round.deck.length) round.gained.push(...saveCombinationResult(round));
   for (const key of app.querySelectorAll('.combination-keys button')) {
     key.disabled = true;
     if (key.dataset.action === 'combo-answer:'+question.answer) key.classList.add('combination-right');
@@ -856,8 +961,7 @@ function nextCombination() {
   }
   const perfect = round.correct === round.deck.length;
   recentMedals = round.gained || [];
-  const medalNotice = recentMedals.length ? '<p class="center combination-medal-notice">🏅 メダルゲット！<br>' +
-    COMBINATION_MEDALS.filter(([id]) => recentMedals.includes(id)).map(medal => medal[2]).join('・') + '</p>' : '';
+  const medalNotice = practiceMedalNotice(recentMedals);
   section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
     '<div class="guide">' + mascot('reward') + '<p class="combination-formula">' +
     round.deck.length + ' もんの うち ' + round.correct + ' もん せいかい</p></div>' +
@@ -982,6 +1086,247 @@ app.addEventListener('submit',event => {
   persistPlayers([...entries,{id,name,record:freshRecord()}]);
   selectPlayer(id);
 });
+
+
+const MOVE_PRACTICE_LEVELS = [
+  ['10の にじ','そのまま・おともだち'],
+  ['5の おか','＋1〜4・−1〜4'],
+  ['へんしんの もり','＋6〜9・−6〜9'],
+  ['おやくそくの まち','4つの おやくそく'],
+  ['50・100に ちょうせん','くりあがり・くりさがり']
+];
+
+const MOVE_PRACTICE_MEDALS = [
+  ['bead-one','🌈','10の にじメダル','たまを うごかして レベル1を クリア'],
+  ['bead-two','🔴','5の おかメダル','たまを うごかして レベル2を クリア'],
+  ['bead-three','🌸','へんしんの もりメダル','たまを うごかして レベル3を クリア'],
+  ['bead-four','🎖️','おやくそくの まちメダル','たまを うごかして レベル4を クリア'],
+  ['bead-five','🏆','50・100 チャンピオン','たまを うごかして レベル5を クリア']
+];
+function movePracticeMedalIds() {
+  return MOVE_PRACTICE_MEDALS.slice(0,movePracticeCleared()).map(([id]) => id);
+}
+
+const MOVE_PRACTICE_COUNT = 10;
+let movePractice = null;
+let beadGesture = null;
+
+function moveBoundaryQuestions(boundary,sign) {
+  const questions = [];
+  for (let operand=1; operand<=9; operand++) {
+    for (let offset=1; offset<=operand; offset++) {
+      const start = sign > 0 ? boundary-offset : boundary+offset-1;
+      questions.push({start,delta:sign*operand});
+    }
+  }
+  return questions;
+}
+function movePracticeDeck(level) {
+  if (level < 5) {
+    const {methods,methodWeights} = LEVELS[level-1];
+    const allowable = BANK.filter(q => level === 2 ? Math.abs(q.delta) <= 4 : level === 3 ? Math.abs(q.delta) >= 6 : true);
+    const groups = methods.map(method => ({method,pool:shuffled(allowable.filter(q => q.method === method))}))
+      .filter(group => group.pool.length);
+    const selected = groups.map(({pool}) => pool.pop());
+    const weighted = groups.flatMap(({method,pool}) => Array(methodWeights?.[method] || 1).fill(pool));
+    while (selected.length < MOVE_PRACTICE_COUNT) {
+      const available = weighted.filter(pool => pool.length);
+      if (!available.length) break;
+      selected.push(available[Math.floor(Math.random()*available.length)].pop());
+    }
+    return shuffled(selected);
+  }
+  const groups = [50,100].flatMap(boundary => [1,-1].map(sign => shuffled(moveBoundaryQuestions(boundary,sign))));
+  const selected = groups.flatMap(group => group.splice(0,2));
+  return shuffled([...selected,...shuffled(groups.flat()).slice(0,MOVE_PRACTICE_COUNT-selected.length)]);
+}
+function movePracticeCleared() {
+  return accountList().find(player => player.id === activePlayer.id)?.beadPracticeCleared || 0;
+}
+function openMovePractice() {
+  movePractice = null;
+  beadGesture = null;
+  const cleared = movePracticeCleared();
+  section('そろばんを うごかしてみる',
+    '<p class="center lead">たまを うごかして けいさんしよう。<br>10もん ぜんぶ せいかいで、つぎの レベルが ひらくよ！</p>' +
+    '<div class="levels">' + MOVE_PRACTICE_LEVELS.map(([title,description],index) => {
+      const level = index+1;
+      const locked = level > cleared+1;
+      return '<button type="button" class="card stage t' + level + '" data-action="move-level:' + level + '"' +
+        (locked ? ' disabled' : '') + '><span aria-hidden="true">' + (locked ? '🔒' : level<=cleared ? '★' : '📍') +
+        '</span><span><strong>レベル ' + level + '　' + title + '</strong><br>' + description +
+        (level<=cleared ? '　✓ クリア' : '') + '</span></button>';
+    }).join('') + '</div>',0,'move-practice-panel');
+}
+function startMovePractice(level) {
+  if (!Number.isInteger(level) || level < 1 || level > MOVE_PRACTICE_LEVELS.length || level > movePracticeCleared()+1) return;
+  const deck = movePracticeDeck(level).map(({start,delta}) => calculationSteps(start,delta>0?'+':'-',Math.abs(delta)));
+  movePractice = {level,deck,index:0,right:0,gained:[]};
+  showMoveQuestion();
+}
+function currentMoveProblem() {
+  return movePractice.deck[movePractice.index];
+}
+function showMoveQuestion() {
+  const round = movePractice;
+  const question = currentMoveProblem();
+  Object.assign(round,{value:question.start,step:0,failed:false,solved:false});
+  beadGesture = null;
+  section('たまを うごかそう',
+    '<div class="move-progress"><span>レベル ' + round.level + '</span><span>' + (round.index+1) +
+    ' / ' + round.deck.length + ' もん</span><span>○ ' + round.right + '</span></div>' +
+    '<p class="move-expression">' + question.start + ' ' + (question.operator==='+'?'＋':'−') + ' ' + question.operand + '</p>' +
+    '<div id="move-board" class="move-board"></div>' +
+    '<p id="move-feedback" class="move-feedback" role="status">たまを タップするか、うえ・したに うごかしてね。</p>' +
+    '<div id="move-controls" class="actions">' + button('はじめの たまに もどす','move-reset') +
+    button('レベルを えらぶ','move-menu') + '</div>',round.level,'move-practice-panel');
+  renderMoveBoard();
+}
+function renderMoveBoard(focusBead) {
+  const container = $('move-board');
+  const previous = Array.from(container.querySelectorAll('[data-y]'),bead => Number(bead.dataset.y));
+  container.innerHTML = board(movePractice.value,'そろばん。いまの たま '+movePractice.value,
+    {interactive:!movePractice.solved,threeDigits:movePractice.level===5});
+  if (previous.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    container.querySelectorAll('[data-y]').forEach((bead,index) => {
+      const offset = previous[index] - Number(bead.dataset.y);
+      if (offset) bead.animate?.([{transform:'translateY('+offset+'px)'},{transform:'translateY(0)'}],
+        {duration:170,easing:'ease-out'});
+    });
+  }
+  if (focusBead) {
+    const {place,kind,index} = focusBead;
+    container.querySelector('[data-move-place="'+place+'"][data-bead="'+kind+'"][data-index="'+index+'"]')?.focus({preventScroll:true});
+  }
+}
+function proposeBeadValue(value,{place,kind,index}) {
+  const digit = placeDigit(value,place);
+  const oldCount = lower(digit);
+  const difference = kind === 'five' ? (upper(digit) ? -5 : 5) :
+    (index < oldCount ? index : index+1) - oldCount;
+  return value + difference * 10 ** place;
+}
+function judgeBeadMove(value,proposed,step,place) {
+  if (place !== step.place) return 'order';
+  const now = placeDigit(value,place), next = placeDigit(proposed,place), goal = placeDigit(step.after,place);
+  const between = (a,b,c) => b>=Math.min(a,c) && b<=Math.max(a,c);
+  return between(upper(now),upper(next),upper(goal)) && between(lower(now),lower(next),lower(goal))
+    ? (proposed === step.after ? 'advance' : 'partial') : 'bead';
+}
+function reportMoveMistake(reason,step) {
+  movePractice.failed = true;
+  const place = TUTOR_PLACES[step.place]+'のくらい';
+  const feedback = $('move-feedback');
+  feedback.className = 'move-feedback move-try';
+  feedback.textContent = reason==='order' ? 'さきに '+place+'の たまを うごかしおえよう。' :
+    reason==='direction' ? 'たまを うごかす むきを たしかめよう。' :
+      place+'の たまの かずを たしかめて、もういちど。';
+}
+function handleBead(bead,directionMatches=true,keyboard=false) {
+  const round = movePractice;
+  if (!round || round.solved) return;
+  const {movePlace,bead:kind,index} = bead.dataset;
+  const selected = {place:Number(movePlace),kind,index:Number(index)};
+  const question = currentMoveProblem();
+  const step = question.steps[round.step];
+  const proposed = proposeBeadValue(round.value,selected);
+  const judgement = judgeBeadMove(round.value,proposed,step,selected.place);
+  if (judgement==='order' || !directionMatches || judgement==='bead') {
+    reportMoveMistake(judgement==='order' ? 'order' : directionMatches ? 'bead' : 'direction',step);
+    return;
+  }
+  round.value = proposed;
+  if (judgement==='advance') round.step++;
+  round.solved = round.step===question.steps.length;
+  renderMoveBoard(keyboard ? selected : null);
+  const feedback = $('move-feedback');
+  feedback.className = 'move-feedback';
+  if (!round.solved) {
+    feedback.textContent = judgement==='partial' ? 'おなじ くらいの のこりの たまを うごかそう。' : 'つぎの たまを うごかそう。';
+    return;
+  }
+  round.gained.push(...markPracticeDay());
+  if (!round.failed) {
+    round.right++;
+    app.querySelector('.move-progress span:last-child').textContent = '○ '+round.right;
+    chime('right');
+    celebration(10);
+  }
+  feedback.classList.add('move-done');
+  feedback.textContent = (round.failed ? 'できた！ こたえは ' : 'せいかい！ こたえは ') + question.answer + '。';
+  $('move-controls').innerHTML = button(round.index+1===round.deck.length ? 'けっかを みる →' : 'つぎの もんだい →',
+    'move-next','button primary') + button('レベルを えらぶ','move-menu');
+  $('move-controls').querySelector('button').focus({preventScroll:true});
+}
+function resetMoveQuestion() {
+  if (!movePractice || movePractice.solved) return;
+  movePractice.value = currentMoveProblem().start;
+  movePractice.step = 0;
+  beadGesture = null;
+  renderMoveBoard();
+  const feedback = $('move-feedback');
+  feedback.className = 'move-feedback';
+  feedback.textContent = 'はじめの たまに もどしたよ。';
+}
+function nextMoveProblem() {
+  const round = movePractice;
+  if (!round?.solved || round.index>=round.deck.length) return;
+  if (++round.index<round.deck.length) {
+    showMoveQuestion();
+    return;
+  }
+  const perfect = round.right===round.deck.length;
+  const cleared = movePracticeCleared();
+  const medal = perfect && round.level>cleared ? MOVE_PRACTICE_MEDALS[round.level-1] : null;
+  recentMedals = medal ? [...round.gained,medal[0]] : round.gained;
+  if (medal) {
+    persistPlayers(accountList().map(player => player.id===activePlayer.id ?
+      {...player,beadPracticeCleared:round.level} : player));
+  }
+  const finalLevel = round.level===MOVE_PRACTICE_LEVELS.length;
+  const message = perfect ? (finalLevel ? 'ぜんぶの レベルを クリア！' : medal ? 'レベル '+(round.level+1)+' が ひらいたよ！' : 'レベル '+round.level+' クリア！') :
+    '10もん ぜんぶ せいかいで レベルクリア！';
+  section(perfect ? 'ぜんもん せいかい！' : 'れんしゅう おつかれさま！',
+    '<div class="guide">'+mascot('reward')+'<p class="center"><strong>○ '+round.right+' / '+round.deck.length+'</strong><br>' +
+    message+'</p></div>' + practiceMedalNotice(recentMedals) +
+    '<div class="actions">'+ (recentMedals.length ? button('メダルを みる','medals') : '') +
+    (perfect && !finalLevel ? button('つぎの レベル →','move-level:'+(round.level+1),'button primary') : '') +
+    button('もういちど れんしゅう','move-level:'+round.level) + button('レベルを えらぶ','move-menu') + '</div>',
+    round.level,'move-practice-panel');
+  if (perfect || recentMedals.length) {
+    chime('win');
+    celebration(38);
+  }
+}
+const targetMoveBead = target => target.closest('#move-board [data-move-place]');
+app.addEventListener('pointerdown',event => {
+  const bead = targetMoveBead(event.target);
+  if (!bead || beadGesture || !event.isPrimary || event.button!==0) return;
+  event.preventDefault();
+  beadGesture = {bead,id:event.pointerId,x:event.clientX,y:event.clientY};
+  bead.setPointerCapture?.(event.pointerId);
+});
+app.addEventListener('pointerup',event => {
+  const gesture = beadGesture;
+  if (!gesture || gesture.id!==event.pointerId) return;
+  beadGesture = null;
+  if (!gesture.bead.isConnected) return;
+  const dy = event.clientY-gesture.y, dx = event.clientX-gesture.x;
+  if (Math.abs(dx)>12 && Math.abs(dx)>Math.abs(dy)) return;
+  const {bead:kind,on} = gesture.bead.dataset;
+  const down = kind==='five' ? on==='0' : on==='1';
+  handleBead(gesture.bead,Math.abs(dy)<8 || (dy>0)===down);
+});
+app.addEventListener('pointercancel',event => {
+  if (beadGesture?.id===event.pointerId) beadGesture = null;
+});
+app.addEventListener('keydown',event => {
+  const bead = targetMoveBead(event.target);
+  if (!bead || event.repeat || !['Enter',' '].includes(event.key)) return;
+  event.preventDefault();
+  handleBead(bead,true,true);
+});
+
 
 function setup(mode) {
   if (mode === 'focus') {
@@ -1158,7 +1503,7 @@ function finish() {
   const rewards = (newBest ? '<p class="center">🎉 じこベスト こうしん！</p>' : '') +
     (unlocked ? '<p class="center">🗺️ レベル ' + record.unlocked + ' が ひらいたよ！</p>' : '') +
     (run.gained.length ? '<div class="guide">' + mascot('reward') + '<p>メダルゲット！<br>' +
-      MEDALS.filter(([id]) => run.gained.includes(id)).map(m => m[2]).join('・') + '</p></div>' : '');
+      [...MEDALS,...PRACTICE_STREAK_MEDALS].filter(([id]) => run.gained.includes(id)).map(m => m[2]).join('・') + '</p></div>' : '');
   section(title,cast() + '<p class="stars center" aria-label="ほし ' + stars + 'こ">' +
     '★'.repeat(stars) + '☆'.repeat(3-stars) + '</p><div class="summary">' +
     metric('とくてん',run.score+'てん') + metric('せいかい',run.right+' / '+n) + metric('せいかいりつ',percent+'%') +
@@ -1173,6 +1518,9 @@ function finish() {
 }
 function medals() {
   const comboMedals = combinationMedalIds(playerCombinationHistory());
+  const beadMedals = movePracticeMedalIds();
+  const ordinary = MEDALS.filter(([id]) => record.medals.includes(id)).map(([id]) => id);
+  const streakMedals = PRACTICE_STREAK_MEDALS.filter(([id]) => record.medals.includes(id)).map(([id]) => id);
   const showGroup = (title,list,earned) => '<section class="medal-group"><h3 class="center">' +
     title + '</h3><p class="center medal-count">' + earned.length + ' / ' + list.length +
     '</p><div class="medals">' + list.map(([id,icon,name,hint]) => {
@@ -1182,9 +1530,12 @@ function medals() {
         (unlocked ? 'ゲット！' : hint) + '</small></div>';
     }).join('') + '</div></section>';
   section('メダルコレクション','<div class="guide">' + mascot('reward') + '<p>' +
-    (record.medals.length + comboMedals.length) + ' / ' + (MEDALS.length + COMBINATION_MEDALS.length) +
-    ' こ あつめたよ！</p></div>' + showGroup('そろばんの れんしゅう',MEDALS,record.medals) +
-    showGroup('くみあわせれんしゅう',COMBINATION_MEDALS,comboMedals));
+    (record.medals.length + comboMedals.length + beadMedals.length) + ' / ' +
+    (MEDALS.length + COMBINATION_MEDALS.length + MOVE_PRACTICE_MEDALS.length + PRACTICE_STREAK_MEDALS.length) +
+    ' こ あつめたよ！</p></div>' + showGroup('そろばんの れんしゅう',MEDALS,ordinary) +
+    showGroup('くみあわせれんしゅう',COMBINATION_MEDALS,comboMedals) +
+    showGroup('そろばんを うごかしてみる',MOVE_PRACTICE_MEDALS,beadMedals) +
+    showGroup('れんぞくれんしゅう',PRACTICE_STREAK_MEDALS,streakMedals));
 }
 
 function records() {
@@ -1195,7 +1546,7 @@ function records() {
     metric('さいこう れんぞく',record.streak+'もん') + metric('れんしゅうした ひ',Object.keys(record.days).length+'にち') +
     metric('きょうの もんだい',(record.days[today()] || 0)+'もん') +
     metric('ふくしゅう できる もんだい',pending+'もん') +
-    metric('あつめた メダル',(record.medals.length+combinationMedalIds(playerCombinationHistory()).length)+'こ') + '</div><h3 class="center">おやくそくごとの せいかいりつ</h3>' +
+    metric('あつめた メダル',(record.medals.length+combinationMedalIds(playerCombinationHistory()).length+movePracticeMedalIds().length)+'こ') + '</div><h3 class="center">おやくそくごとの せいかいりつ</h3>' +
     '<div class="method-stats">' + METHOD_KEYS.map(key => {
       const info = record.methods[key];
       return metric(METHODS[key],info.total ? accuracy(info.correct,info.total)+'%（'+info.correct+'/'+info.total+'）' : '—');
@@ -1222,6 +1573,10 @@ app.addEventListener('click',event => {
     case 'rename': editPlayer(value); break;
     case 'setup': setup(value); break;
     case 'tutor': tutor(); break;
+    case 'move-menu': openMovePractice(); break;
+    case 'move-level': startMovePractice(Number(value)); break;
+    case 'move-reset': resetMoveQuestion(); break;
+    case 'move-next': nextMoveProblem(); break;
     case 'combo-menu': openCombinations(); break;
     case 'combo-start': startCombinations(value); break;
     case 'combo-answer': answerCombination(Number(value)); break;
